@@ -67,4 +67,27 @@ export interface Asset {
 export type ModuleId =
   | 'overview' | 'pipelines' | 'logs' | 'tickets' | 'network'
   | 'terraform' | 'kubernetes' | 'namespaces' | 'services'
-  | 'vulnerabilities' | 'capacity' | 'runbooks' | 'assets'
+  | 'vulnerabilities' | 'capacity' | 'runbooks' | 'assets' | 'settings' | 'comparator'
+
+export interface NotificationItem {
+  id: string
+  title: string
+  message: string
+  tone: Severity
+  time: string
+  read: boolean
+}
+
+export interface AuditEntry {
+  id: string
+  action: string
+  detail: string
+  time: string
+  actor?: string
+}
+
+export interface FavoriteItem {
+  id: string
+  module: ModuleId
+  label: string
+}
