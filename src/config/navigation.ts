@@ -1,6 +1,6 @@
 import {
-  Activity, Boxes, Bug, Cable, ClipboardCheck, Gauge, GitBranch,
-  LayoutDashboard, ListTree, Network, ScrollText, ServerCog, TicketCheck,
+  Activity, Boxes, Bug, Cable, ClipboardCheck, GitCompareArrows, Gauge, GitBranch,
+  LayoutDashboard, ListTree, Network, ScrollText, ServerCog, Settings, TicketCheck,
 } from 'lucide-react'
 import type { ModuleId } from '../types'
 
@@ -18,4 +18,6 @@ export const navigation: { id: ModuleId; label: string; section: string; icon: t
   { id:'capacity', label:'Capacidade da equipe', section:'Segurança & Gestão', icon:Activity },
   { id:'runbooks', label:'Runbooks', section:'Segurança & Gestão', icon:ClipboardCheck },
   { id:'assets', label:'Ativos de TI', section:'Segurança & Gestão', icon:Boxes },
+  { id:'comparator', label:'Comparador entre módulos', section:'Plataforma', icon:GitCompareArrows },
+  { id:'settings', label:'Configurações', section:'Plataforma', icon:Settings },
 ]
