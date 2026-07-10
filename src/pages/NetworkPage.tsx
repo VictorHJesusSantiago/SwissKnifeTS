@@ -1,18 +1,59 @@
-import { Play, RotateCcw, Router, Wifi, Zap } from 'lucide-react'
-import { useCallback, useState } from 'react'
-import { ForceGraph } from '../components/graph/ForceGraph'
+import { AlertTriangle, Download, Play, RotateCcw, Router, Star, Wifi, Zap } from 'lucide-react'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { TopologyGraph, type TopologyGraphHandle } from '../components/graph/TopologyGraph'
 import { MetricCard } from '../components/ui/MetricCard'
 import { PageHeader } from '../components/ui/PageHeader'
+import { useAudit } from '../context/AuditContext'
+import { useFavorites } from '../context/FavoritesContext'
+import { useNotifications } from '../context/NotificationContext'
+import { extraInfraLinks } from '../data/networkExtra'
+import '../styles/network-extra.css'
+import { useI18n } from '../i18n/I18nContext'
 import type { GraphNode } from '../types'
+import { blastRadius, detectCycle } from '../utils/graphAnalysis'
 
-const nodes:GraphNode[]=[{id:'Internet',group:'edge',health:'healthy'},{id:'WAF',group:'edge',health:'healthy'},{id:'LB-Prod',group:'edge',health:'healthy'},{id:'VPC-App',group:'core',health:'healthy'},{id:'VPC-Data',group:'core',health:'warning'},{id:'NAT-01',group:'edge',health:'healthy'},{id:'DB-Primary',group:'data',health:'warning'},{id:'Redis',group:'data',health:'healthy'},{id:'VPN',group:'edge',health:'healthy'}]
-const links=[{source:'Internet',target:'WAF',value:90},{source:'WAF',target:'LB-Prod',value:85},{source:'LB-Prod',target:'VPC-App',value:75},{source:'VPC-App',target:'VPC-Data',value:60},{source:'VPC-Data',target:'DB-Primary',value:70},{source:'VPC-Data',target:'Redis',value:45},{source:'VPC-App',target:'NAT-01',value:35},{source:'VPN',target:'VPC-App',value:25}]
+const nodes: GraphNode[] = [{id:'Internet',group:'edge',health:'healthy'},{id:'WAF',group:'edge',health:'healthy'},{id:'LB-Prod',group:'edge',health:'healthy'},{id:'VPC-App',group:'core',health:'healthy'},{id:'VPC-Data',group:'core',health:'warning'},{id:'NAT-01',group:'edge',health:'healthy'},{id:'DB-Primary',group:'data',health:'warning'},{id:'Redis',group:'data',health:'healthy'},{id:'VPN',group:'edge',health:'healthy'}]
+const baseLinks=[{source:'Internet',target:'WAF',value:90},{source:'WAF',target:'LB-Prod',value:85},{source:'LB-Prod',target:'VPC-App',value:75},{source:'VPC-App',target:'VPC-Data',value:60},{source:'VPC-Data',target:'DB-Primary',value:70},{source:'VPC-Data',target:'Redis',value:45},{source:'VPC-App',target:'NAT-01',value:35},{source:'VPN',target:'VPC-App',value:25}]
+const links=[...baseLinks,...extraInfraLinks]
+const TRACE_PATH=['Internet','WAF','LB-Prod','VPC-App','VPC-Data']
+const groups=Array.from(new Set(nodes.map(n=>n.group)))
+
 export default function NetworkPage(){
- const [selected,setSelected]=useState<GraphNode>(nodes[4]),[packet,setPacket]=useState<string[]>([])
- const select=useCallback((n:GraphNode)=>setSelected(n),[])
- const simulate=()=>{setPacket(['Internet']);['WAF','LB-Prod','VPC-App','VPC-Data'].forEach((n,i)=>setTimeout(()=>setPacket(p=>[...p,n]),(i+1)*400))}
- return <><PageHeader eyebrow="CONECTIVIDADE" title="Topologia de rede" description="Explore os componentes, conexões e rotas da infraestrutura." actions={<><button className="button" onClick={()=>setPacket([])}><RotateCcw size={16}/> Limpar</button><button className="button button--primary" onClick={simulate}><Play size={16}/> Simular pacote</button></>}/>
- <section className="metric-grid"><MetricCard label="Dispositivos" value="42" hint="39 online"/><MetricCard label="Tráfego atual" value="8,4 Gbps" delta="+6,2%"/><MetricCard label="Perda de pacotes" value="0,03%" tone="healthy"/><MetricCard label="Latência média" value="14ms" tone="healthy"/></section>
- <section className="graph-layout"><article className="panel graph-panel"><div className="graph-toolbar"><span><i className="dot dot--success"/>Operacional</span><span><i className="dot dot--warning"/>Degradado</span><span>Scroll para zoom · arraste para mover</span></div><ForceGraph nodes={nodes} links={links} onSelect={select}/>{packet.length>0&&<div className="packet-path"><Zap size={15}/>{packet.map((p,i)=><span key={p}>{i>0&&'→'} {p}</span>)}</div>}</article>
- <aside className="panel node-detail"><div className="node-detail__icon"><Router/></div><span className="eyebrow">COMPONENTE SELECIONADO</span><h2>{selected.id}</h2><span className={`health-label health-label--${selected.health}`}><i/>{selected.health==='healthy'?'Operacional':'Degradado'}</span><dl><div><dt>Tipo</dt><dd>{selected.group}</dd></div><div><dt>IP privado</dt><dd>10.28.4.12</dd></div><div><dt>Região</dt><dd>sa-east-1</dd></div><div><dt>Throughput</dt><dd>1,8 Gbps</dd></div></dl><div className="mini-stat"><Wifi size={17}/><span><strong>14ms</strong> latência atual</span></div></aside></section></>
+ const { t } = useI18n()
+ const { logAction } = useAudit()
+ const { addNotification } = useNotifications()
+ const { isFavorite, toggleFavorite } = useFavorites()
+ const graphRef = useRef<TopologyGraphHandle>(null)
+ const [selected,setSelected]=useState<GraphNode>(nodes[4])
+ const [packet,setPacket]=useState<string[]>([])
+ const [playing,setPlaying]=useState(false)
+ const [hiddenGroups,setHiddenGroups]=useState<Set<string>>(new Set())
+
+ const cycle = useMemo(()=>detectCycle(nodes,links),[])
+ const blast = useMemo(()=>blastRadius(selected.id,links),[selected])
+
+ const select=useCallback((n:GraphNode)=>{setSelected(n);logAction('Rede: componente selecionado',n.id)},[logAction])
+
+ const simulate=()=>{
+  setPlaying(true)
+  setPacket(['Internet'])
+  graphRef.current?.playTrace(TRACE_PATH,()=>setPlaying(false))
+  TRACE_PATH.slice(1).forEach((n,i)=>setTimeout(()=>setPacket(p=>[...p,n]),(i+1)*400))
+  logAction('Rede: trace de pacote simulado',TRACE_PATH.join(' → '))
+ }
+
+ const toggleGroup=(g:string)=>setHiddenGroups(prev=>{const next=new Set(prev);next.has(g)?next.delete(g):next.add(g);return next})
+
+ const exportImage=()=>{
+  graphRef.current?.exportPng('topologia-rede.png')
+  addNotification('Exportação concluída','A topologia de rede foi exportada como PNG.','healthy')
+  logAction('Rede: grafo exportado','topologia-rede.png')
+ }
+
+ return <><PageHeader eyebrow={t('network.eyebrow')} title={t('network.title')} description={t('network.subtitle')} actions={<><button className="button" onClick={()=>setPacket([])}><RotateCcw size={16}/> {t('network.clear')}</button><button className="button" onClick={exportImage}><Download size={16}/> {t('network.exportPng')}</button><button className="button button--primary" disabled={playing} onClick={simulate}><Play size={16}/> {t('network.simulatePacket')}</button></>}/>
+ <section className="metric-grid"><MetricCard label={t('network.metricDevices')} value="42" hint={t('network.metricDevicesHint')}/><MetricCard label={t('network.metricTraffic')} value="8,4 Gbps" delta="+6,2%"/><MetricCard label={t('network.metricPacketLoss')} value="0,03%" tone="healthy"/><MetricCard label={t('network.metricLatency')} value="14ms" tone="healthy"/></section>
+ {cycle.hasCycle && <div className="cycle-warning"><AlertTriangle size={18}/><span><strong>{t('network.cycleWarning')}</strong> {Array.from(cycle.cycleNodes).join(' → ')} → {Array.from(cycle.cycleNodes)[0]}. {t('network.cycleWarningSuffix')}</span></div>}
+ <div className="tier-filter">{groups.map(g=><button key={g} className={hiddenGroups.has(g)?'':'is-active'} onClick={()=>toggleGroup(g)}>{g}</button>)}</div>
+ <section className="graph-layout"><article className="panel graph-panel"><div className="graph-toolbar"><span><i className="dot dot--success"/>{t('network.operational')}</span><span><i className="dot dot--warning"/>{t('network.degraded')}</span><span>{t('network.zoomHint')}</span></div><TopologyGraph ref={graphRef} nodes={nodes} links={links} onSelect={select} hiddenGroups={hiddenGroups} blastNodeIds={blast} cycleNodeIds={cycle.cycleNodes} cycleLinkKeys={cycle.cycleLinks} selectedId={selected.id}/>{packet.length>0&&<div className="packet-path"><Zap size={15}/>{packet.map((p,i)=><span key={p}>{i>0&&'→'} {p}</span>)}</div>}</article>
+ <aside className="panel node-detail"><div className="node-detail__icon"><Router/></div><div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}><span className="eyebrow">{t('network.selectedComponent')}</span><button className="icon-button" title={t('pipelines.favorite')} onClick={()=>toggleFavorite({ id: selected.id, module: 'network', label: selected.id })}><Star fill={isFavorite('network', selected.id) ? 'currentColor' : 'none'} size={15}/></button></div><h2>{selected.id}</h2><span className={`health-label health-label--${selected.health}`}><i/>{selected.health==='healthy'?t('network.operational'):t('network.degraded')}</span><dl><div><dt>{t('network.type')}</dt><dd>{selected.group}</dd></div><div><dt>{t('network.privateIp')}</dt><dd>10.28.4.12</dd></div><div><dt>{t('network.region')}</dt><dd>sa-east-1</dd></div><div><dt>{t('network.throughput')}</dt><dd>1,8 Gbps</dd></div></dl><div className="mini-stat"><Wifi size={17}/><span><strong>14ms</strong> {t('network.currentLatency')}</span></div>{blast.size>0 && <div className="blast-badge"><AlertTriangle size={13}/> {blast.size} {t('network.blastRadius')}</div>}</aside></section></>
 }
