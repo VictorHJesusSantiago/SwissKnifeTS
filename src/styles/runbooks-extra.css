@@ -1,0 +1,22 @@
+.runbook-toolbar { display: flex; gap: 8px; padding: 10px 18px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.runbook-toolbar input, .runbook-toolbar select { flex: 1; min-width: 120px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: rgba(255,255,255,.03); color: inherit; font-size: 12px; }
+.runbook-list button small.incident-tag { display: inline-block; margin-left: 4px; padding: 1px 6px; border-radius: 20px; background: rgba(255,255,255,.08); font-size: 9px; }
+
+.step-edit-row { display: flex; align-items: center; gap: 8px; width: 100%; }
+.step-edit-row input { flex: 1; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: rgba(255,255,255,.04); color: inherit; font-size: 12px; }
+.step-duration { font-size: 10px; color: var(--muted); margin-left: auto; white-space: nowrap; }
+
+.runbook-toolbar-row { display: flex; gap: 8px; padding: 12px 18px 0; flex-wrap: wrap; }
+
+.version-panel { padding: 14px 18px; border-top: 1px solid var(--border); }
+.version-panel__list { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.version-panel__list button { padding: 4px 10px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: inherit; font-size: 11px; cursor: pointer; }
+.version-panel__list button.is-active { background: rgba(128,151,255,.25); border-color: #8097ff; }
+.diff-view { display: flex; flex-direction: column; gap: 4px; font-size: 12px; margin-top: 8px; }
+.diff-view__added { color: #6fd7a3; }
+.diff-view__removed { color: #ff7082; text-decoration: line-through; }
+
+.timer-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; background: rgba(111,215,163,.15); color: #6fd7a3; font-size: 11px; font-weight: 600; }
+
+.exec-history-item { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 11px; }
+.exec-history-item small { color: var(--muted); }

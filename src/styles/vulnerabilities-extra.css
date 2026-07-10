@@ -1,0 +1,46 @@
+/* Estilos exclusivos das funcionalidades extras da VulnerabilitiesPage. Não editar global.css. */
+
+.vuln-extra-tabs { display: flex; gap: 8px; margin: 18px 0 12px; flex-wrap: wrap; }
+.vuln-extra-tabs button { height: 33px; padding: 0 14px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); background: #0d1a2a; font-size: 9px; font-weight: 700; cursor: pointer; }
+.vuln-extra-tabs button.is-active { color: var(--accent); border-color: #285a51; background: #12332f; }
+
+.risk-matrix-wrap { padding: 16px; }
+.risk-matrix { display: grid; grid-template-columns: 26px repeat(5, 1fr); gap: 3px; }
+.risk-matrix-yaxis { grid-column: 1; display: flex; align-items: center; justify-content: center; writing-mode: vertical-rl; transform: rotate(180deg); color: var(--muted); font-size: 8px; }
+.risk-matrix-cell { position: relative; min-height: 68px; padding: 4px; border-radius: 6px; background: #0d1a2a; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 3px; }
+.risk-matrix-cell::before { content: attr(data-cell); position: absolute; top: 2px; left: 4px; color: #3a4b5e; font-size: 6px; }
+.risk-matrix-row-label { color: var(--muted); font-size: 7px; display: flex; align-items: center; justify-content: center; }
+.risk-matrix-axis-x { display: grid; grid-template-columns: 26px repeat(5, 1fr); gap: 3px; margin-top: 6px; }
+.risk-matrix-axis-x span { text-align: center; color: var(--muted); font-size: 7px; }
+.risk-dot { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; color: #07111f; font-size: 6px; font-weight: 800; cursor: pointer; border: 2px solid transparent; }
+.risk-dot--critica { background: #ef5a76; }
+.risk-dot--alta { background: #f2a33f; }
+.risk-dot--media { background: #5b8bf2; }
+.risk-dot--baixa { background: #6ce5c4; }
+.risk-dot.is-selected { border-color: #fff; }
+.risk-matrix-legend { display: flex; gap: 14px; margin-top: 12px; color: var(--muted); font-size: 7px; }
+.risk-matrix-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.risk-matrix-legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.risk-matrix-hint { margin-top: 10px; color: var(--muted); font-size: 8px; }
+
+.link-panel { padding: 16px; }
+.link-panel h4 { margin: 0 0 4px; font-size: 12px; }
+.link-panel p { margin: 0 0 12px; color: var(--muted); font-size: 8px; }
+.link-panel-group { margin-bottom: 12px; }
+.link-panel-group h5 { margin: 0 0 7px; color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .5px; }
+.link-panel-item { display: flex; justify-content: space-between; padding: 9px 11px; border: 1px solid var(--border); border-radius: 7px; margin-bottom: 6px; font-size: 8px; color: #c6d1dd; }
+.link-panel-item small { color: var(--muted); }
+.link-panel-empty { color: var(--muted); font-size: 8px; }
+
+.timeline-gantt { padding: 6px 16px 16px; display: grid; gap: 9px; }
+.timeline-gantt-row { display: grid; grid-template-columns: 1.6fr 1fr 2.2fr; align-items: center; gap: 10px; font-size: 8px; }
+.timeline-gantt-row strong { color: #c6d1dd; display: block; }
+.timeline-gantt-row small { color: var(--muted); display: block; margin-top: 2px; }
+.timeline-gantt-track { position: relative; height: 16px; border-radius: 8px; background: #0d1a2a; overflow: hidden; }
+.timeline-gantt-fill { height: 100%; border-radius: 8px; }
+.timeline-gantt-fill--ok { background: var(--accent); }
+.timeline-gantt-fill--warn { background: var(--warning); }
+.timeline-gantt-fill--danger { background: var(--danger); }
+.timeline-gantt-label { margin-top: 4px; color: var(--muted); font-size: 7px; }
+
+.compliance-toolbar { padding: 14px 16px; display: flex; justify-content: flex-end; }
