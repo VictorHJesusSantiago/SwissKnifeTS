@@ -1,0 +1,21 @@
+.warranty-alert-panel { padding: 14px 18px; }
+.warranty-alert-panel__list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.warranty-alert-panel__item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-radius: 8px; background: rgba(255,112,130,.1); font-size: 12px; }
+.warranty-alert-panel__item small { color: var(--muted); display: block; }
+.badge-warning-inline { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 20px; background: rgba(255,112,130,.2); color: #ff7082; font-size: 9px; font-weight: 700; }
+
+.asset-detail-grid { display: grid; grid-template-columns: 160px 1fr; gap: 20px; padding: 4px 0 12px; }
+.asset-code-canvas { image-rendering: pixelated; width: 140px; height: 140px; border-radius: 8px; border: 4px solid #fff; }
+.asset-code-label { text-align: center; font-size: 10px; color: var(--muted); margin-top: 6px; }
+
+.lifecycle-timeline { display: flex; flex-direction: column; gap: 0; }
+.lifecycle-timeline__stage { display: flex; gap: 12px; padding-bottom: 16px; position: relative; }
+.lifecycle-timeline__stage:not(:last-child)::before { content: ''; position: absolute; left: 7px; top: 20px; bottom: 0; width: 2px; background: var(--border); }
+.lifecycle-timeline__dot { width: 16px; height: 16px; border-radius: 50%; background: rgba(255,255,255,.08); border: 2px solid var(--border); flex-shrink: 0; z-index: 1; }
+.lifecycle-timeline__stage.is-done .lifecycle-timeline__dot { background: #6fd7a3; border-color: #6fd7a3; }
+.lifecycle-timeline__stage.is-current .lifecycle-timeline__dot { background: #8097ff; border-color: #8097ff; }
+.lifecycle-timeline__stage div strong { display: block; font-size: 12px; }
+.lifecycle-timeline__stage div small { color: var(--muted); font-size: 11px; }
+
+.depreciation-row { display: flex; justify-content: space-between; font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.depreciation-row small { color: var(--muted); }
