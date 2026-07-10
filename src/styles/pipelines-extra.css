@@ -1,0 +1,40 @@
+.dag { display: flex; align-items: center; gap: 0; overflow-x: auto; padding: 20px 4px; }
+.dag__node { display: flex; flex-direction: column; align-items: center; gap: 8px; min-width: 108px; }
+.dag__node-circle { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--border-light); background: #0d1a2a; }
+.dag__node-circle--success { border-color: #3fbf8f; color: #3fbf8f; }
+.dag__node-circle--failed { border-color: #e05d5d; color: #e05d5d; }
+.dag__node-circle--running { border-color: #8097ff; color: #8097ff; }
+.dag__node-circle--pending { border-color: var(--border); color: var(--muted); }
+.dag__node span { font-size: 10px; font-weight: 700; text-align: center; }
+.dag__node small { font-size: 8.5px; color: var(--muted); }
+.dag__arrow { display: flex; align-items: center; color: var(--muted); flex-shrink: 0; margin: 0 -2px; padding-bottom: 26px; }
+
+.history-chart-wrap { padding: 6px 2px 2px; }
+.history-chart-wrap .bar-chart__row span { min-width: 90px; }
+
+.gate-banner { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 10px; border: 1px dashed #f8c56a; background: #2a2410; margin-top: 10px; }
+.gate-banner span { flex: 1; font-size: 11px; }
+
+.compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.compare-col h3 { font-size: 12px; margin-bottom: 8px; }
+.compare-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 11px; }
+.compare-row:last-child { border: 0; }
+.compare-row__delta--up { color: #e05d5d; }
+.compare-row__delta--down { color: #3fbf8f; }
+
+.run-picker { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.run-picker button { border: 1px solid var(--border); background: #0d1a2a; color: var(--text); border-radius: 7px; padding: 5px 9px; font-size: 10px; cursor: pointer; }
+.run-picker button.is-active { border-color: var(--accent); color: var(--accent); }
+
+:root[data-theme="light"] .dag__node-circle { background: #f7f9fc; }
+:root[data-theme="light"] .gate-banner { background: #fbf3df; }
+:root[data-theme="light"] .run-picker button { background: #f7f9fc; }
+
+.dag-graph { position: relative; height: 200px; margin: 16px 4px; overflow-x: auto; min-width: 520px; }
+.dag-graph__svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.dag-edge { stroke: var(--border-light); stroke-width: 2; }
+.dag-edge--active { stroke: var(--accent); }
+.dag-edge--pending { stroke: var(--border); stroke-dasharray: 4 4; }
+.dag-graph__node { position: absolute; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 92px; }
+.dag-graph__node span { font-size: 10px; font-weight: 700; text-align: center; }
+.dag-graph__node small { font-size: 8.5px; color: var(--muted); }
