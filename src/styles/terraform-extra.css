@@ -1,0 +1,56 @@
+/* Estilos exclusivos das funcionalidades extras da TerraformPage. Não editar global.css. */
+
+.tf-extra-tabs { display: flex; gap: 8px; margin: 18px 0 12px; flex-wrap: wrap; }
+.tf-extra-tabs button { height: 33px; padding: 0 14px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); background: #0d1a2a; font-size: 9px; font-weight: 700; cursor: pointer; }
+.tf-extra-tabs button.is-active { color: var(--accent); border-color: #285a51; background: #12332f; }
+
+.tf-diff-toolbar { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.tf-diff-toolbar label { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 8px; }
+.tf-diff-toolbar select { height: 33px; padding: 0 8px; border-radius: 7px; font-size: 9px; }
+
+.tf-diff-list { padding: 14px 16px; display: grid; gap: 10px; }
+.tf-diff-resource { border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+.tf-diff-resource > header { display: flex; align-items: center; gap: 10px; padding: 10px 13px; font-size: 9px; color: #c6d1dd; background: #0b1725; }
+.tf-diff-resource > header code { color: #8097ff; font: 9px 'DM Mono'; }
+.tf-diff-resource > header span { margin-left: auto; color: var(--muted); font-size: 7px; }
+.tf-diff-resource--add { border-left: 3px solid var(--accent); }
+.tf-diff-resource--change { border-left: 3px solid var(--warning); }
+.tf-diff-resource--destroy { border-left: 3px solid var(--danger); }
+.tf-diff-tag { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 12px; font-size: 7px; font-weight: 800; text-transform: uppercase; }
+.tf-diff-tag--add { color: var(--accent); background: #12332f; }
+.tf-diff-tag--change { color: var(--warning); background: #352c1e; }
+.tf-diff-tag--destroy { color: var(--danger); background: #3c1e2a; }
+.tf-diff-attrs { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; font-size: 8px; }
+.tf-diff-attrs > div { padding: 8px 13px; border-top: 1px solid var(--border); }
+.tf-diff-attrs .tf-attr-key { color: var(--muted); }
+.tf-diff-attrs .tf-attr-before { color: var(--danger); text-decoration: line-through; opacity: .85; }
+.tf-diff-attrs .tf-attr-after { color: var(--accent); }
+.tf-diff-empty { padding: 30px; text-align: center; color: var(--muted); font-size: 9px; }
+
+.tf-graph-layout { display: grid; grid-template-columns: 1fr 260px; gap: 14px; }
+.tf-graph-svg { display: block; width: 100%; height: 380px; background: radial-gradient(circle at center, #13283c 0, #091522 65%); border-radius: 10px; }
+.tf-graph-node rect { fill: #123c3a; stroke: #2a5d55; stroke-width: 1.5; cursor: pointer; }
+.tf-graph-node text { fill: #91a1b4; font: 8px Manrope; pointer-events: none; }
+.tf-graph-node.is-selected rect { fill: #16403e; stroke: var(--accent); stroke-width: 2.5; }
+.tf-graph-node.is-related rect { fill: #2b2f1e; stroke: var(--warning); }
+.tf-graph-node.is-dimmed rect { opacity: .35; }
+.tf-graph-edge { stroke: #35506a; stroke-width: 1.4; fill: none; opacity: .7; }
+.tf-graph-edge.is-related { stroke: var(--warning); stroke-width: 2; opacity: 1; }
+.tf-graph-detail { padding: 14px; }
+.tf-graph-detail h4 { margin: 0 0 8px; font-size: 11px; }
+.tf-graph-detail dl { display: grid; gap: 6px; margin: 0; }
+.tf-graph-detail dl div { display: flex; justify-content: space-between; font-size: 8px; color: var(--muted); }
+.tf-graph-detail dl b { color: var(--text); font-weight: 700; }
+.tf-graph-legend { display: flex; gap: 12px; padding: 10px 14px; color: var(--muted); font-size: 7px; }
+.tf-graph-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.tf-graph-legend i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+
+.tf-apply-list { padding: 6px 16px 16px; display: grid; gap: 8px; }
+.tf-apply-item { display: flex; align-items: center; gap: 12px; padding: 12px 13px; border: 1px solid var(--border); border-radius: 9px; background: #0e1d2e; }
+.tf-apply-item time { width: 130px; color: var(--muted); font-size: 8px; }
+.tf-apply-item strong { flex: 1; font-size: 9px; font-weight: 600; }
+.tf-apply-item small { display: block; margin-top: 3px; color: var(--muted); font-size: 7px; }
+
+.tf-cost-table { margin: 0 16px 16px; }
+.tf-cost-total { display: flex; justify-content: space-between; align-items: center; margin: 14px 16px; padding: 13px; border: 1px solid #28504b; border-radius: 8px; color: var(--muted); background: #112b2c; font-size: 11px; }
+.tf-cost-total strong { color: var(--accent); font-size: 16px; }
