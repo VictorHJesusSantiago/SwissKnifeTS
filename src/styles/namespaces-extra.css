@@ -1,0 +1,12 @@
+.quota-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.quota-row { display: flex; flex-direction: column; gap: 4px; }
+.quota-row__label { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); }
+.quota-track { position: relative; height: 7px; border-radius: 999px; background: var(--surface-3); overflow: hidden; }
+.quota-track i { display: block; height: 100%; border-radius: 999px; background: var(--accent); transition: width .35s ease; }
+.quota-track.is-warning i { background: var(--warning); }
+.quota-track.is-danger i { background: var(--danger); }
+
+.yaml-editor textarea { width: 100%; min-height: 280px; background: #0b1017; color: #cfe3e9; border: 1px solid var(--border); border-radius: 10px; padding: 12px; font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12.5px; line-height: 1.6; resize: vertical; }
+.yaml-editor__status { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 12px; border-radius: 8px; font-size: 12.5px; }
+.yaml-editor__status.is-ok { background: rgba(108, 229, 196, .12); color: var(--accent); border: 1px solid rgba(108, 229, 196, .35); }
+.yaml-editor__status.is-error { background: rgba(255, 112, 130, .12); color: var(--danger); border: 1px solid rgba(255, 112, 130, .35); }

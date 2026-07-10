@@ -1,0 +1,14 @@
+.graph-node--cycle .graph-node__circle { stroke: var(--danger); stroke-width: 3px; filter: drop-shadow(0 0 6px rgba(255, 112, 130, .55)); }
+.graph-link--cycle { stroke: var(--danger) !important; stroke-dasharray: 4 3; opacity: .9; }
+.graph-node--blast .graph-node__circle { stroke: var(--warning); stroke-width: 3px; filter: drop-shadow(0 0 6px rgba(248, 197, 106, .5)); }
+.graph-node--selected .graph-node__circle { stroke: var(--accent); stroke-width: 3px; }
+.graph-trace-marker { fill: var(--accent); filter: drop-shadow(0 0 6px rgba(108, 229, 196, .85)); }
+
+.cycle-warning { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: var(--radius); background: rgba(255, 112, 130, .1); border: 1px solid rgba(255, 112, 130, .35); color: var(--danger); font-size: 12.5px; margin-bottom: 14px; }
+.cycle-warning strong { color: var(--danger); }
+
+.tier-filter { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.tier-filter button { border: 1px solid var(--border); background: var(--surface-2); color: var(--muted); border-radius: 999px; padding: 5px 13px; font-size: 11.5px; cursor: pointer; transition: all .15s ease; }
+.tier-filter button.is-active { background: var(--accent-dark); color: var(--accent); border-color: var(--accent); }
+
+.blast-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px; background: rgba(248, 197, 106, .12); border: 1px solid rgba(248, 197, 106, .35); color: var(--warning); font-size: 11.5px; margin-top: 8px; }
