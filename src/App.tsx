@@ -9,6 +9,15 @@ import { RoleProvider } from './context/RoleContext'
 import { CurrentUserProvider } from './context/CurrentUserContext'
 import { TourProvider, useTour } from './context/TourContext'
 import { TourOverlay } from './components/tour/TourOverlay'
+import { UIPrefsProvider } from './context/UIPrefsContext'
+import { NavigationStatsProvider, useNavigationStats } from './context/NavigationStatsContext'
+import { ErrorLogProvider } from './context/ErrorLogContext'
+import { DemoModeProvider, useDemoMode } from './context/DemoModeContext'
+import { ErrorBoundary } from './components/ErrorBoundary'
+import { DebugConsole } from './components/debug/DebugConsole'
+import { ChangelogModal } from './components/changelog/ChangelogModal'
+import { useLocalStorage } from './hooks/useLocalStorage'
+import { APP_VERSION } from './data/changelog'
 import type { ModuleId } from './types'
 
 const pages = {
@@ -27,6 +36,7 @@ const pages = {
   assets: lazy(() => import('./pages/AssetsPage')),
   settings: lazy(() => import('./pages/SettingsPage')),
   comparator: lazy(() => import('./pages/ComparatorPage')),
+  help: lazy(() => import('./pages/HelpPage')),
 }
 
 function currentRoute(): ModuleId {
@@ -34,50 +44,100 @@ function currentRoute(): ModuleId {
   return route in pages ? route : 'overview'
 }
 
-function Shell() {
+function ShellInner() {
   const [active, setActive] = useState<ModuleId>(currentRoute)
   const { start, hasSeenTour } = useTour()
+  const { recordVisit } = useNavigationStats()
+  const demo = useDemoMode()
+  const [seenVersion, setSeenVersion] = useLocalStorage('opsphere-seen-version', '')
+  const [showChangelog, setShowChangelog] = useState(false)
+
   useEffect(() => {
     const sync = () => setActive(currentRoute())
     window.addEventListener('hashchange', sync)
     return () => window.removeEventListener('hashchange', sync)
   }, [])
+
+  useEffect(() => { recordVisit(active) }, [active, recordVisit])
+
   useEffect(() => {
     if (active === 'overview' && !hasSeenTour) {
       const timer = setTimeout(() => start(), 600)
       return () => clearTimeout(timer)
     }
   }, [active, hasSeenTour, start])
+
+  useEffect(() => {
+    if (seenVersion !== APP_VERSION) {
+      setShowChangelog(true)
+      setSeenVersion(APP_VERSION)
+    }
+  }, [seenVersion, setSeenVersion])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'm') { demo.active ? demo.stop() : demo.start() }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [demo])
+
   const navigate = (id: ModuleId) => {
     window.location.hash = `/${id}`
     setActive(id)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
+
   const Page = pages[active]
-  return <AppShell active={active} onNavigate={navigate}>
-    <Suspense fallback={<div className="page-loader"><i/><span>Carregando módulo...</span></div>}>
-      {active === 'overview' ? <Page onNavigate={navigate}/> : <Page/>}
-    </Suspense>
-  </AppShell>
+  return <>
+    {demo.active && <div className="demo-banner">Modo demonstração automática ativo <button onClick={demo.stop}>Parar</button></div>}
+    <AppShell active={active} onNavigate={navigate}>
+      <ErrorBoundary>
+        <Suspense fallback={<div className="page-loader"><i/><span>Carregando módulo...</span></div>}>
+          {active === 'overview' ? <Page onNavigate={navigate}/> : <Page/>}
+        </Suspense>
+      </ErrorBoundary>
+    </AppShell>
+    {showChangelog && <ChangelogModal onClose={() => setShowChangelog(false)}/>}
+  </>
+}
+
+function Shell() {
+  const [active, setActive] = useState<ModuleId>(currentRoute)
+  useEffect(() => {
+    const sync = () => setActive(currentRoute())
+    window.addEventListener('hashchange', sync)
+    return () => window.removeEventListener('hashchange', sync)
+  }, [])
+  return <DemoModeProvider currentModule={active} onNavigate={id => { window.location.hash = `/${id}` }}>
+    <ShellInner/>
+  </DemoModeProvider>
 }
 
 export default function App() {
   return <ThemeProvider>
     <I18nProvider>
-      <RoleProvider>
-        <CurrentUserProvider>
-          <NotificationProvider>
-            <AuditProvider>
-              <FavoritesProvider>
-                <TourProvider>
-                  <Shell/>
-                  <TourOverlay/>
-                </TourProvider>
-              </FavoritesProvider>
-            </AuditProvider>
-          </NotificationProvider>
-        </CurrentUserProvider>
-      </RoleProvider>
+      <UIPrefsProvider>
+        <RoleProvider>
+          <CurrentUserProvider>
+            <NotificationProvider>
+              <ErrorLogProvider>
+                <AuditProvider>
+                  <FavoritesProvider>
+                    <NavigationStatsProvider>
+                      <TourProvider>
+                        <Shell/>
+                        <TourOverlay/>
+                        <DebugConsole/>
+                      </TourProvider>
+                    </NavigationStatsProvider>
+                  </FavoritesProvider>
+                </AuditProvider>
+              </ErrorLogProvider>
+            </NotificationProvider>
+          </CurrentUserProvider>
+        </RoleProvider>
+      </UIPrefsProvider>
     </I18nProvider>
   </ThemeProvider>
 }
