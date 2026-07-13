@@ -30,3 +30,19 @@ export function buildLiveMessage() {
   const template = liveMessageTemplates[Math.floor(rand() * liveMessageTemplates.length)]
   return template.replace('{ms}', String(Math.floor(rand() * 900) + 20)).replace('{n}', String(Math.floor(rand() * 3) + 1))
 }
+
+// Normaliza uma mensagem de log substituindo números e ids hexadecimais, para agrupar mensagens similares.
+export function normalizeLogMessage(message: string): string {
+  return message
+    .toLowerCase()
+    .replace(/[0-9a-f]{6,}/gi, '#id#')
+    .replace(/\d+/g, '#n#')
+    .trim()
+}
+
+export interface AlertRule {
+  id: string
+  level: 'ERROR' | 'WARN' | 'INFO' | 'DEBUG'
+  service: string
+  active: boolean
+}
