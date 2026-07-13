@@ -1,19 +1,28 @@
-import { AlertTriangle, CheckCircle2, Download, FileText, Filter, Gauge, Link2, Search, ShieldCheck, ShieldOff, Star, Timer } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Download, FileJson, FileText, Filter, Gauge, Layers, Link2, RefreshCw, Scale, Search, ShieldCheck, ShieldOff, Star, Timer } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Badge } from '../components/ui/Badge'
+import { BarChart } from '../components/charts/BarChart'
 import { MetricCard } from '../components/ui/MetricCard'
 import { Modal } from '../components/ui/Modal'
 import { PageHeader } from '../components/ui/PageHeader'
+import { useAudit } from '../context/AuditContext'
 import { useFavorites } from '../context/FavoritesContext'
+import { useNotifications } from '../context/NotificationContext'
 import { useRole } from '../context/RoleContext'
+import { useLocalStorage } from '../hooks/useLocalStorage'
 import { assets, serviceNodes, vulnerabilities as initial } from '../data/mockData'
+import { assigneeOptions } from '../data/ticketsExtra'
 import { baseProbabilityBySeverity, detectedAtById, slaDaysBySeverity } from '../data/vulnerabilitiesExtra'
+import { runbookSuggestionBySeverity, scanCandidates, weeklyTrend } from '../data/vulnerabilitiesExtra2'
 import { useI18n } from '../i18n/I18nContext'
+import { getSeed, mulberry32 } from '../utils/seed'
 import type { Vulnerability } from '../types'
 import '../styles/vulnerabilities-extra.css'
+import '../styles/vulnerabilities-extra2.css'
 
 type SortKey='cvss'|'severity'|'due'
 const severityRank:Record<Vulnerability['severity'],number>={'Crítica':4,'Alta':3,'Média':2,'Baixa':1}
+const NOW = new Date('2026-07-07T12:00:00')
 
 function download(filename:string,content:string,type='text/csv'){
  const blob=new Blob([content],{type})
@@ -23,7 +32,7 @@ function download(filename:string,content:string,type='text/csv'){
  URL.revokeObjectURL(url)
 }
 
-type ExtraTab = 'table' | 'matrix' | 'timeline' | 'compliance'
+type ExtraTab = 'table' | 'matrix' | 'timeline' | 'compliance' | 'byPackage' | 'posture' | 'compare'
 
 // Normaliza um nome para comparação aproximada (minúsculas, sem acentos/hífens/espaços extras).
 function normalize(s: string): string {
@@ -57,15 +66,38 @@ function severityClass(sev: string): string {
  return sev.toLowerCase().replace('í', 'i').replace('é', 'e')
 }
 
+function sarifLevel(sev: Vulnerability['severity']): 'error' | 'warning' | 'note' {
+ if (sev === 'Crítica' || sev === 'Alta') return 'error'
+ if (sev === 'Média') return 'warning'
+ return 'note'
+}
+
 export default function VulnerabilitiesPage(){
  const { t } = useI18n()
  const { isFavorite, toggleFavorite } = useFavorites()
  const { canEdit } = useRole()
+ const { logAction } = useAudit()
+ const { addNotification } = useNotifications()
  const [items,setItems]=useState(initial),[query,setQuery]=useState(''),[severity,setSeverity]=useState('Todas')
  const [selected,setSelected]=useState<string[]>([])
  const [sort,setSort]=useState<{key:SortKey;dir:1|-1}|null>(null)
  const [detail,setDetail]=useState<Vulnerability|null>(null)
  const [tab,setTab]=useState<ExtraTab>('table')
+
+ // --- Responsável pela remediação por vulnerabilidade (persistido) ---
+ const [assigneeById, setAssigneeById] = useLocalStorage<Record<string,string>>('opsphere-vuln-assignee', {})
+
+ // --- Exceção temporária: data de expiração por vulnerabilidade (persistido) ---
+ const [exceptionExpiryById, setExceptionExpiryById] = useLocalStorage<Record<string,string>>('opsphere-vuln-exception-expiry', {})
+ const [exceptionDraft, setExceptionDraft] = useState('')
+
+ // --- Rescan simulado ---
+ const [rescanResult, setRescanResult] = useState<number | null>(null)
+
+ // --- Comparação de postura entre dois ativos ---
+ const assetOptions = useMemo(() => Array.from(new Set(items.map(v => v.asset))), [items])
+ const [compareA, setCompareA] = useState(assetOptions[0])
+ const [compareB, setCompareB] = useState(assetOptions[1] ?? assetOptions[0])
 
  const visible=useMemo(()=>{
   const filtered=items.filter(v=>(severity==='Todas'||v.severity===severity)&&(`${v.cve} ${v.package} ${v.asset}`).toLowerCase().includes(query.toLowerCase()))
@@ -87,10 +119,65 @@ export default function VulnerabilitiesPage(){
  const toggleSelectAll=()=>setSelected(s=>s.length===visible.length?[]:visible.map(v=>v.id))
  const resolveSelected=()=>{setItems(v=>v.map(i=>selected.includes(i.id)?{...i,status:'Resolvida' as Vulnerability['status']}:i));setSelected([])}
 
+ // --- Simulação de patch em lote (item 12): aplica correção mock a todas as selecionadas ---
+ const patchSelected = () => {
+  const ids = [...selected]
+  if (ids.length === 0) return
+  setItems(v => v.map(i => ids.includes(i.id) ? { ...i, status: 'Resolvida' as Vulnerability['status'] } : i))
+  addNotification(t('vulnerabilities.bulk.patchAll'), `${ids.length} vulnerabilidade(s) corrigidas via patch em lote.`, 'healthy')
+  logAction(t('vulnerabilities.bulk.patchAll'), `Patch em lote aplicado a ${ids.length} vulnerabilidade(s): ${ids.join(', ')}`)
+  setSelected([])
+ }
+
  const exportCsv=()=>{
   const header='cve,package,asset,severity,cvss,status,due'
   const rows=visible.map(v=>[v.cve,v.package,v.asset,v.severity,v.cvss,v.status,v.due].join(','))
   download('vulnerabilidades.csv',[header,...rows].join('\n'))
+ }
+
+ // --- Exportação em JSON puro (item 13) ---
+ const exportJson = () => download('vulnerabilidades.json', JSON.stringify(visible, null, 2), 'application/json')
+
+ // --- Exportação em SARIF simplificado (item 13) ---
+ const exportSarif = () => {
+  const sarif = {
+   version: '2.1.0',
+   $schema: 'https://json.schemastore.org/sarif-2.1.0.json',
+   runs: [{
+    tool: { driver: { name: 'OpsPhere Vulnerability Scanner', informationUri: 'https://opsphere.local', rules: [] } },
+    results: visible.map(v => ({ ruleId: v.cve, message: { text: `${v.package} em ${v.asset} (CVSS ${v.cvss})` }, level: sarifLevel(v.severity) })),
+   }],
+  }
+  download('vulnerabilidades.sarif.json', JSON.stringify(sarif, null, 2), 'application/json')
+ }
+
+ // --- Simulação de rescan (item 16): usa o seed compartilhado para "encontrar" 0-2 novas vulnerabilidades ---
+ const runRescan = () => {
+  const rand = mulberry32(getSeed() + items.length * 7 + 3)
+  const numFound = Math.floor(rand() * 3)
+  const newOnes: Vulnerability[] = []
+  for (let i = 0; i < numFound; i++) {
+   const candidate = scanCandidates[Math.floor(rand() * scanCandidates.length)]
+   newOnes.push({ ...candidate, id: `v-scan-${Date.now()}-${i}` })
+  }
+  if (newOnes.length > 0) setItems(v => [...v, ...newOnes])
+  setRescanResult(newOnes.length)
+  addNotification(t('vulnerabilities.rescan.button'), newOnes.length > 0 ? `${newOnes.length} ${t('vulnerabilities.rescan.found')}` : t('vulnerabilities.rescan.noneFound'), newOnes.length > 0 ? 'warning' : 'healthy')
+  logAction(t('vulnerabilities.rescan.button'), newOnes.length > 0 ? `Rescan encontrou ${newOnes.length} nova(s) vulnerabilidade(s).` : 'Rescan não encontrou novas vulnerabilidades.')
+ }
+
+ // --- Exceção temporária (item 17) ---
+ const acceptTemporaryException = (id: string, expiry: string) => {
+  if (!expiry) return
+  accept(id)
+  setExceptionExpiryById(m => ({ ...m, [id]: expiry }))
+  logAction(t('vulnerabilities.exception.button'), `Exceção temporária aceita para ${id} até ${expiry}.`)
+  setExceptionDraft('')
+ }
+ const isExceptionExpired = (id: string) => {
+  const expiry = exceptionExpiryById[id]
+  if (!expiry) return false
+  return new Date(expiry) < NOW
  }
 
  // --- Vinculação de CVE a ativos/serviços afetados ---
@@ -118,8 +205,7 @@ export default function VulnerabilitiesPage(){
  const timelineRows = useMemo(() => items.map(v => {
   const slaDays = slaDaysBySeverity[v.severity] ?? 30
   const detectedAt = detectedAtById[v.id] ? new Date(detectedAtById[v.id]) : new Date()
-  const now = new Date('2026-07-07T12:00:00')
-  const elapsedMs = now.getTime() - detectedAt.getTime()
+  const elapsedMs = NOW.getTime() - detectedAt.getTime()
   const slaMs = slaDays * 24 * 60 * 60 * 1000
   const ratio = Math.max(0, elapsedMs / slaMs)
   const remainingRatio = 1 - ratio
@@ -130,6 +216,35 @@ export default function VulnerabilitiesPage(){
   }
   return { v, slaDays, elapsedDays: Math.max(0, Math.round(elapsedMs / 86400000)), ratio: Math.min(1, ratio), tone }
  }), [items])
+
+ // --- Agrupamento por pacote (item 11) ---
+ const byPackage = useMemo(() => {
+  const map = new Map<string, { pkg: string; count: number; highest: Vulnerability['severity']; items: Vulnerability[] }>()
+  items.forEach(v => {
+   const existing = map.get(v.package)
+   if (!existing) map.set(v.package, { pkg: v.package, count: 1, highest: v.severity, items: [v] })
+   else { existing.count++; existing.items.push(v); if (severityRank[v.severity] > severityRank[existing.highest]) existing.highest = v.severity }
+  })
+  return Array.from(map.values()).sort((a, b) => b.count - a.count)
+ }, [items])
+
+ // --- Postura de segurança (item 18) ---
+ const posture = useMemo(() => {
+  const counts: Record<string, number> = {}
+  items.filter(v => v.status !== 'Resolvida').forEach(v => { counts[v.severity] = (counts[v.severity] ?? 0) + 1 })
+  const penalty = (counts['Crítica'] ?? 0) * 25 + (counts['Alta'] ?? 0) * 12 + (counts['Média'] ?? 0) * 5 + (counts['Baixa'] ?? 0) * 2
+  const score = Math.max(0, Math.min(100, 100 - penalty))
+  const classification = score >= 80 ? t('vulnerabilities.posture.good') : score >= 50 ? t('vulnerabilities.posture.attention') : t('vulnerabilities.posture.critical')
+  const tone = score >= 80 ? 'good' : score >= 50 ? 'attention' : 'critical'
+  return { score, classification, tone, counts }
+ }, [items, t])
+
+ // --- Comparação de postura entre dois ativos (item 20) ---
+ const compareCounts = (asset: string) => {
+  const counts: Record<string, number> = { 'Crítica': 0, 'Alta': 0, 'Média': 0, 'Baixa': 0 }
+  items.filter(v => v.asset === asset).forEach(v => { counts[v.severity] = (counts[v.severity] ?? 0) + 1 })
+  return counts
+ }
 
  // --- Geração de relatório de compliance ---
  const generateReport = () => {
@@ -158,26 +273,33 @@ export default function VulnerabilitiesPage(){
 
  return <><PageHeader eyebrow={t('vulnerabilities.eyebrow')} title={t('vulnerabilities.title')} description={t('vulnerabilities.description')} actions={<>
   <button className="button" onClick={exportCsv}><Download size={16}/> {t('vulnerabilities.exportCsv')}</button>
-  <button className="button button--primary"><ShieldCheck size={16}/> {t('vulnerabilities.startScan')}</button>
+  <button className="button" onClick={exportJson}><FileJson size={16}/> {t('vulnerabilities.export.json')}</button>
+  <button className="button" onClick={exportSarif}><FileJson size={16}/> {t('vulnerabilities.export.sarif')}</button>
+  <button className="button button--primary" onClick={runRescan}><ShieldCheck size={16}/> {t('vulnerabilities.startScan')}</button>
  </>}/>
  <section className="metric-grid"><MetricCard label={t('vulnerabilities.metric.criticalOpen')} value="12" delta="-4" tone="critical"/><MetricCard label={t('vulnerabilities.metric.totalRisk')} value="72 / 100" delta="-6" tone="warning"/><MetricCard label={t('vulnerabilities.metric.mttr')} value="3,8 dias" delta="-18%"/><MetricCard label={t('vulnerabilities.metric.scanCoverage')} value="97,4%" delta="+1,2%" tone="healthy"/></section>
+
+ {rescanResult !== null && <div className="vuln-rescan-result"><RefreshCw size={12}/> {rescanResult > 0 ? `${rescanResult} ${t('vulnerabilities.rescan.found')}` : t('vulnerabilities.rescan.noneFound')}</div>}
 
  <div className="vuln-extra-tabs">
   <button className={tab==='table'?'is-active':''} onClick={()=>setTab('table')}><ShieldCheck size={13}/> {t('vulnerabilities.tab.table')}</button>
   <button className={tab==='matrix'?'is-active':''} onClick={()=>setTab('matrix')}><Gauge size={13}/> {t('vulnerabilities.tab.matrix')}</button>
   <button className={tab==='timeline'?'is-active':''} onClick={()=>setTab('timeline')}><Timer size={13}/> {t('vulnerabilities.tab.timeline')}</button>
+  <button className={tab==='byPackage'?'is-active':''} onClick={()=>setTab('byPackage')}><Layers size={13}/> {t('vulnerabilities.tab.byPackage')}</button>
+  <button className={tab==='posture'?'is-active':''} onClick={()=>setTab('posture')}><ShieldCheck size={13}/> {t('vulnerabilities.tab.posture')}</button>
+  <button className={tab==='compare'?'is-active':''} onClick={()=>setTab('compare')}><Scale size={13}/> {t('vulnerabilities.tab.compare')}</button>
   <button className={tab==='compliance'?'is-active':''} onClick={()=>setTab('compliance')}><FileText size={13}/> {t('vulnerabilities.tab.compliance')}</button>
  </div>
 
  {tab==='table' && <section className="panel table-panel"><div className="table-toolbar"><label className="search-input"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder={t('vulnerabilities.searchPlaceholder')}/></label><Filter size={16}/><select value={severity} onChange={e=>setSeverity(e.target.value)}><option>Todas</option><option>Crítica</option><option>Alta</option><option>Média</option><option>Baixa</option></select></div>
- {selected.length>0&&<div className="bulk-bar"><span>{selected.length} {t('vulnerabilities.selectedCount')}</span><button className="button button--tiny" disabled={!canEdit} title={!canEdit ? 'Ação bloqueada no modo visualizador' : undefined} onClick={resolveSelected}><CheckCircle2 size={13}/> {t('vulnerabilities.resolveSelected')}</button><button className="button button--tiny" onClick={()=>setSelected([])}>{t('vulnerabilities.clearSelection')}</button></div>}
+ {selected.length>0&&<div className="bulk-bar"><span>{selected.length} {t('vulnerabilities.selectedCount')}</span><button className="button button--tiny" disabled={!canEdit} title={!canEdit ? 'Ação bloqueada no modo visualizador' : undefined} onClick={resolveSelected}><CheckCircle2 size={13}/> {t('vulnerabilities.resolveSelected')}</button><button className="button button--tiny" disabled={!canEdit} title={!canEdit ? 'Ação bloqueada no modo visualizador' : undefined} onClick={patchSelected}><ShieldCheck size={13}/> {t('vulnerabilities.bulk.patchAll')}</button><button className="button button--tiny" onClick={()=>setSelected([])}>{t('vulnerabilities.clearSelection')}</button></div>}
  <div className="vuln-table data-table"><div className="data-table__head"><span><input type="checkbox" className="vuln-checkbox" checked={selected.length>0&&selected.length===visible.length} onChange={toggleSelectAll}/> {t('vulnerabilities.table.vulnerability')}</span><span>{t('vulnerabilities.table.asset')}</span><span className="sortable-head" onClick={()=>toggleSort('severity')}>{t('vulnerabilities.table.severity')} {sort?.key==='severity'?(sort.dir===1?'▲':'▼'):''}</span><span className="sortable-head" onClick={()=>toggleSort('cvss')}>{t('vulnerabilities.table.cvss')} {sort?.key==='cvss'?(sort.dir===1?'▲':'▼'):''}</span><span>{t('vulnerabilities.table.status')}</span><span className="sortable-head" onClick={()=>toggleSort('due')}>{t('vulnerabilities.table.sla')} {sort?.key==='due'?(sort.dir===1?'▲':'▼'):''}</span><span/></div>
  {visible.map(v=><div className="data-table__row" key={v.id}>
-  <span><input type="checkbox" className="vuln-checkbox" checked={selected.includes(v.id)} onChange={()=>toggleSelect(v.id)} onClick={e=>e.stopPropagation()}/><span onClick={()=>setDetail(v)} style={{cursor:'pointer'}}><strong>{v.cve}</strong><small>{v.package}</small></span></span>
+  <span><input type="checkbox" className="vuln-checkbox" checked={selected.includes(v.id)} onChange={()=>toggleSelect(v.id)} onClick={e=>e.stopPropagation()}/><span onClick={()=>{setDetail(v);setExceptionDraft('')}} style={{cursor:'pointer'}}><strong>{v.cve}</strong><small>{v.package}</small></span></span>
   <span>{v.asset}</span>
   <span><Badge tone={v.severity}>{v.severity}</Badge></span>
   <span><b className={`cvss cvss--${v.severity.toLowerCase().replace('í','i')}`}>{v.cvss}</b></span>
-  <span>{v.status}</span>
+  <span>{v.status}{v.status==='Aceita' && isExceptionExpired(v.id) && <span className="vuln-exception-expired"> · {t('vulnerabilities.exception.expired')}</span>}</span>
   <span className={v.due==='Hoje'?'text-danger':''}>{v.due}</span>
   <span style={{display:'flex',gap:6,alignItems:'center'}}>
    <button className="icon-button" title="Favoritar" onClick={()=>toggleFavorite({ id: v.id, module: 'vulnerabilities', label: `${v.cve} · ${v.asset}` })}><Star fill={isFavorite('vulnerabilities', v.id) ? 'currentColor' : 'none'} size={14}/></button>
@@ -219,6 +341,46 @@ export default function VulnerabilitiesPage(){
   </div>
  </section>}
 
+ {tab==='byPackage' && <section className="panel table-panel">
+  <div className="vuln-package-table data-table">
+   <div className="data-table__head" style={{gridTemplateColumns:'2fr 1fr 1fr'}}><span>{t('vulnerabilities.byPackage.package')}</span><span>{t('vulnerabilities.byPackage.count')}</span><span>{t('vulnerabilities.byPackage.highestSeverity')}</span></div>
+   {byPackage.map(row => <div className="data-table__row" key={row.pkg} style={{gridTemplateColumns:'2fr 1fr 1fr'}}>
+    <span>{row.pkg}</span><span>{row.count}</span><span><Badge tone={row.highest}>{row.highest}</Badge></span>
+   </div>)}
+  </div>
+ </section>}
+
+ {tab==='posture' && <section className="panel">
+  <div className="vuln-posture-grid">
+   <div className={`vuln-posture-score tone-${posture.tone}`}>
+    <strong>{posture.score}</strong>
+    <span>{t('vulnerabilities.posture.score')} · {posture.classification}</span>
+   </div>
+   <div>
+    <h4 style={{margin:'0 0 10px',fontSize:'10px'}}>{t('vulnerabilities.trend.title')}</h4>
+    <BarChart data={weeklyTrend.map(w=>({label:`${w.week} · ${t('vulnerabilities.trend.opened')}`,value:w.opened,color:'#ef5a76'}))}/>
+    <div style={{height:10}}/>
+    <BarChart data={weeklyTrend.map(w=>({label:`${w.week} · ${t('vulnerabilities.trend.closed')}`,value:w.closed,color:'#6ce5c4'}))}/>
+   </div>
+  </div>
+ </section>}
+
+ {tab==='compare' && <section className="panel table-panel">
+  <div className="vuln-compare-toolbar">
+   <label>{t('vulnerabilities.compare.assetA')}<select value={compareA} onChange={e=>setCompareA(e.target.value)}>{assetOptions.map(a=><option key={a} value={a}>{a}</option>)}</select></label>
+   <label>{t('vulnerabilities.compare.assetB')}<select value={compareB} onChange={e=>setCompareB(e.target.value)}>{assetOptions.map(a=><option key={a} value={a}>{a}</option>)}</select></label>
+  </div>
+  <div className="vuln-compare-grid">
+   {[compareA, compareB].map((asset, idx) => {
+    const counts = compareCounts(asset)
+    return <div className="vuln-compare-col" key={`${asset}-${idx}`}>
+     <h4>{asset}</h4>
+     {(['Crítica','Alta','Média','Baixa'] as const).map(sev => <div className="vuln-compare-col-row" key={sev}><Badge tone={sev}>{sev}</Badge><strong>{counts[sev] ?? 0}</strong></div>)}
+    </div>
+   })}
+  </div>
+ </section>}
+
  {tab==='compliance' && <section className="panel">
   <div className="compliance-toolbar"><button className="button button--primary" onClick={generateReport}><FileText size={16}/> {t('vulnerabilities.compliance.generateReport')}</button></div>
   <div className="attribute-table" style={{margin:'0 16px 16px'}}>
@@ -233,9 +395,20 @@ export default function VulnerabilitiesPage(){
     <dt>{t('vulnerabilities.detail.asset')}</dt><dd>{detail.asset}</dd>
     <dt>{t('vulnerabilities.detail.severity')}</dt><dd><Badge tone={detail.severity}>{detail.severity}</Badge></dd>
     <dt>{t('vulnerabilities.detail.cvss')}</dt><dd>{detail.cvss}</dd>
-    <dt>{t('vulnerabilities.detail.status')}</dt><dd>{detail.status}</dd>
+    <dt>{t('vulnerabilities.detail.status')}</dt><dd>{detail.status}{detail.status==='Aceita' && exceptionExpiryById[detail.id] && <> · {exceptionExpiryById[detail.id]}{isExceptionExpired(detail.id) && <span className="vuln-exception-expired"> ({t('vulnerabilities.exception.expired')})</span>}</>}</dd>
     <dt>{t('vulnerabilities.detail.sla')}</dt><dd>{detail.due}</dd>
    </dl>
+
+   <div className="vuln-detail-assignee">
+    <label style={{display:'block',fontSize:'8px',color:'var(--muted)',marginBottom:5}}>{t('vulnerabilities.detail.assignee')}</label>
+    <select value={assigneeById[detail.id] ?? ''} disabled={!canEdit} onChange={e=>setAssigneeById(m=>({...m,[detail.id]:e.target.value}))}>
+     <option value="">{t('vulnerabilities.detail.assigneeNone')}</option>
+     {assigneeOptions.map(name=><option key={name} value={name}>{name}</option>)}
+    </select>
+   </div>
+
+   <div className="vuln-runbook-hint"><Link2 size={12}/> {t('vulnerabilities.detail.runbookSuggestion')}: {runbookSuggestionBySeverity[detail.severity]}</div>
+
    <div className="link-panel">
     <div className="link-panel-group">
      <h5><Link2 size={12}/> {t('vulnerabilities.detail.relatedAssets')}</h5>
@@ -246,6 +419,12 @@ export default function VulnerabilitiesPage(){
      {relatedServices.length>0?relatedServices.map(s=><div className="link-panel-item" key={s.id}><span>{s.id}</span><small>{s.group}{s.health?` · ${s.health}`:''}</small></div>):<div className="link-panel-empty">{t('vulnerabilities.detail.noServiceMatch')}</div>}
     </div>
    </div>
+
+   {detail.status!=='Resolvida' && detail.status!=='Aceita' && <div className="vuln-exception-row">
+    <input type="date" value={exceptionDraft} disabled={!canEdit} onChange={e=>setExceptionDraft(e.target.value)}/>
+    <button className="button button--tiny" disabled={!canEdit || !exceptionDraft} onClick={()=>{acceptTemporaryException(detail.id, exceptionDraft); setDetail(null)}}><ShieldOff size={13}/> {t('vulnerabilities.exception.confirm')}</button>
+   </div>}
+
    <div className="modal-actions">
     <button className="button" disabled={detail.status==='Aceita'||detail.status==='Resolvida'||!canEdit} title={!canEdit ? 'Ação bloqueada no modo visualizador' : undefined} onClick={()=>{accept(detail.id);setDetail(null)}}><ShieldOff size={14}/> {t('vulnerabilities.detail.acceptRisk')}</button>
     <button className="button button--primary" disabled={detail.status==='Resolvida'||!canEdit} title={!canEdit ? 'Ação bloqueada no modo visualizador' : undefined} onClick={()=>{resolve(detail.id);setDetail(null)}}><CheckCircle2 size={14}/> {t('vulnerabilities.detail.markResolved')}</button>
