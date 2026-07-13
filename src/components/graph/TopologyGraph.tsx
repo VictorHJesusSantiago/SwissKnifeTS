@@ -22,12 +22,24 @@ interface Props {
   cycleNodeIds?: Set<string>
   cycleLinkKeys?: Set<string>
   selectedId?: string
+  /** Node ids whose health changed since the last saved snapshot (diff mode). */
+  diffNodeIds?: Set<string>
+  /** Node ids that have a persisted annotation/post-it; rendered with a small marker. */
+  annotatedNodeIds?: Set<string>
+  /** When true, links are colored/thickened by traffic `value` (heatmap mode). */
+  heatmap?: boolean
+  /** Node ids that belong to a highlighted critical path; all others are dimmed. */
+  pathNodeIds?: Set<string>
+  /** Extra per-node CSS class, e.g. to show cascading-failure state. */
+  extraNodeClass?: (id: string) => string
+  /** Selected pair of node ids for side-by-side comparison mode. */
+  compareNodeIds?: Set<string>
 }
 
 const endId = (v: string | { id: string }) => typeof v === 'string' ? v : v.id
 
 export const TopologyGraph = forwardRef<TopologyGraphHandle, Props>(function TopologyGraph(
-  { nodes, links, onSelect, hiddenGroups, blastNodeIds, cycleNodeIds, cycleLinkKeys, selectedId }, ref,
+  { nodes, links, onSelect, hiddenGroups, blastNodeIds, cycleNodeIds, cycleLinkKeys, selectedId, diffNodeIds, annotatedNodeIds, heatmap, pathNodeIds, extraNodeClass, compareNodeIds }, ref,
 ) {
   const svgRef = useRef<SVGSVGElement>(null)
   const posRef = useRef<Map<string, { x: number; y: number }>>(new Map())
@@ -57,11 +69,15 @@ export const TopologyGraph = forwardRef<TopologyGraphHandle, Props>(function Top
       .force('center', d3.forceCenter(width / 2, height / 2))
       .force('collision', d3.forceCollide(38))
 
+    const maxValue = Math.max(1, ...linkData.map(d => d.value || 0))
     const link = root.append('g').attr('class', 'graph-links').selectAll('line').data(linkData).join('line')
-      .attr('stroke-width', d => 1 + (d.value || 20) / 35)
+      .attr('stroke-width', d => heatmap ? 1.5 + ((d.value || 0) / maxValue) * 7 : 1 + (d.value || 20) / 35)
+      .attr('stroke', d => heatmap ? d3.interpolateRgb('#3a6fd8', '#ff5a3c')((d.value || 0) / maxValue) : null)
       .attr('class', d => {
         const s = endId(d.source as any), t = endId(d.target as any)
-        return cycleLinkKeys?.has(linkKey(s, t)) ? 'graph-link--cycle' : ''
+        const classes = [cycleLinkKeys?.has(linkKey(s, t)) ? 'graph-link--cycle' : '']
+        if (pathNodeIds && pathNodeIds.size > 0 && !(pathNodeIds.has(s) && pathNodeIds.has(t))) classes.push('graph-link--dim')
+        return classes.filter(Boolean).join(' ')
       })
 
     const group = root.append('g').selectAll<SVGGElement, SimulationNode>('g').data(nodeData).join('g')
@@ -70,12 +86,18 @@ export const TopologyGraph = forwardRef<TopologyGraphHandle, Props>(function Top
         blastNodeIds?.has(d.id) ? 'graph-node--blast' : '',
         cycleNodeIds?.has(d.id) ? 'graph-node--cycle' : '',
         selectedId === d.id ? 'graph-node--selected' : '',
+        diffNodeIds?.has(d.id) ? 'graph-node--diff' : '',
+        compareNodeIds?.has(d.id) ? 'graph-node--compare' : '',
+        pathNodeIds && pathNodeIds.size > 0 && !pathNodeIds.has(d.id) ? 'graph-node--dim' : '',
+        extraNodeClass ? extraNodeClass(d.id) : '',
       ].filter(Boolean).join(' '))
       .on('click', (_, d) => onSelect?.(d))
 
     group.append('circle').attr('r', 23).attr('class', d => `graph-node__circle graph-node__circle--${d.health || d.group}`)
     group.append('text').attr('y', 39).attr('text-anchor', 'middle').text(d => d.id)
     group.append('text').attr('text-anchor', 'middle').attr('dy', '.35em').attr('class', 'graph-node__initial').text(d => d.id.slice(0, 2).toUpperCase())
+    group.filter(d => !!annotatedNodeIds?.has(d.id)).append('text')
+      .attr('x', 16).attr('y', -14).attr('class', 'graph-node__note').attr('text-anchor', 'middle').text('📝')
 
     const drag = d3.drag<SVGGElement, SimulationNode>()
       .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(.3).restart(); d.fx = d.x; d.fy = d.y })
@@ -95,7 +117,7 @@ export const TopologyGraph = forwardRef<TopologyGraphHandle, Props>(function Top
     })
 
     return () => { simulation.stop(); if (animRef.current) cancelAnimationFrame(animRef.current) }
-  }, [nodes, links, onSelect, hiddenGroups, blastNodeIds, cycleNodeIds, cycleLinkKeys, selectedId])
+  }, [nodes, links, onSelect, hiddenGroups, blastNodeIds, cycleNodeIds, cycleLinkKeys, selectedId, diffNodeIds, annotatedNodeIds, heatmap, pathNodeIds, extraNodeClass, compareNodeIds])
 
   useImperativeHandle(ref, () => ({
     playTrace(path, onDone) {
