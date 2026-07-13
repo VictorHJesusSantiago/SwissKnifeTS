@@ -35,3 +35,40 @@ export const absences: Absence[] = [
 ]
 
 export const HOURS_PER_PERSON_WEEK = 40
+
+// --- Histórico de sprints (utilização de capacidade) ---
+export interface SprintHistoryEntry { sprint: string; utilization: number }
+export const sprintHistory: SprintHistoryEntry[] = [
+  { sprint: 'Sprint 18', utilization: 78 },
+  { sprint: 'Sprint 19', utilization: 85 },
+  { sprint: 'Sprint 20', utilization: 91 },
+  { sprint: 'Sprint 21', utilization: 88 },
+  { sprint: 'Sprint 22', utilization: 94 },
+]
+
+// Utilização individual por sprint, usada para detectar burnout (>90% por 2+ sprints seguidos)
+export const personSprintUtilization: Record<string, number[]> = {
+  'Ana Lima': [72, 80, 88, 91, 95],
+  'Caio Nunes': [90, 92, 94, 96, 97],
+  'Bia Reis': [65, 70, 68, 72, 74],
+  'Davi Souza': [80, 84, 90, 93, 92],
+  'Ellen Costa': [70, 75, 78, 80, 82],
+  'Felipe Rocha': [60, 62, 65, 66, 68],
+  'Gabi Martins': [88, 91, 93, 95, 96],
+}
+
+// --- Rodízio de plantão ---
+export const onCallRoster = ['Ana Lima', 'Caio Nunes', 'Bia Reis', 'Davi Souza', 'Ellen Costa', 'Felipe Rocha', 'Gabi Martins']
+
+// --- Skill matrix ---
+export const skills = ['Backend', 'Kubernetes', 'Segurança', 'Frontend'] as const
+export type Skill = typeof skills[number]
+export const skillMatrix: Record<string, Record<Skill, number>> = {
+  'Ana Lima': { Backend: 4, Kubernetes: 5, 'Segurança': 3, Frontend: 2 },
+  'Caio Nunes': { Backend: 5, Kubernetes: 2, 'Segurança': 2, Frontend: 4 },
+  'Bia Reis': { Backend: 3, Kubernetes: 3, 'Segurança': 5, Frontend: 2 },
+  'Davi Souza': { Backend: 4, Kubernetes: 4, 'Segurança': 3, Frontend: 1 },
+  'Ellen Costa': { Backend: 2, Kubernetes: 2, 'Segurança': 2, Frontend: 5 },
+  'Felipe Rocha': { Backend: 3, Kubernetes: 3, 'Segurança': 2, Frontend: 3 },
+  'Gabi Martins': { Backend: 4, Kubernetes: 5, 'Segurança': 4, Frontend: 2 },
+}
