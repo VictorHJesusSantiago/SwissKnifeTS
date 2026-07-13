@@ -9,6 +9,7 @@ import { ToastStack } from '../notifications/ToastStack'
 import { Modal } from '../ui/Modal'
 import { useKeyboardShortcuts, useShortcutBindings } from '../../hooks/useKeyboardShortcuts'
 import { useTheme } from '../../context/ThemeContext'
+import { PinnedBar } from './PinnedBar'
 
 export function AppShell({ active, onNavigate, children }: { active: ModuleId; onNavigate: (id: ModuleId) => void; children: ReactNode }) {
   const [collapsed, setCollapsed] = useLocalStorage('opsphere-sidebar', false)
@@ -29,6 +30,7 @@ export function AppShell({ active, onNavigate, children }: { active: ModuleId; o
     <Sidebar active={active} collapsed={collapsed} onToggle={() => setCollapsed(v => !v)} onNavigate={onNavigate}/>
     <div className="app-main">
       <Topbar onOpenPalette={() => setPaletteOpen(true)} onOpenNotifications={() => setNotifOpen(true)}/>
+      <PinnedBar onNavigate={onNavigate}/>
       <main className="content">{children}</main>
     </div>
     <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} onNavigate={onNavigate}/>
