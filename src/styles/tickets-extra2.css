@@ -1,0 +1,28 @@
+/* Extras 2: duplicate detection, TTR metrics, round-robin, dependencies, checklist, list view, story points, stale badge, reactions */
+.duplicate-warning{display:flex;flex-direction:column;gap:6px;padding:10px;margin:0 20px 8px;border:1px solid var(--warning);border-radius:8px;background:#2a230f;color:#e7c873;font-size:8px}
+.ttr-panel{display:flex;flex-wrap:wrap;gap:10px;padding:12px;margin-bottom:12px;border:1px solid var(--border);border-radius:10px;background:#081522}
+.ttr-panel__item{display:flex;flex-direction:column;gap:2px;min-width:80px}
+.ttr-panel__item span{color:var(--muted);font-size:8px}
+.ttr-panel__item strong{font-size:14px}
+.view-toggle{display:flex;gap:4px}
+.view-toggle button{height:31px;padding:0 10px;border-radius:7px;font-size:9px}
+.view-toggle button.is-active{border-color:var(--accent);color:var(--accent)}
+.ticket-table{width:100%;border-collapse:collapse;font-size:9px}
+.ticket-table th{text-align:left;padding:8px;color:var(--muted);border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+.ticket-table td{padding:8px;border-bottom:1px solid var(--border);color:#c6d1dd}
+.ticket-table tr:hover{background:#0e1d2e;cursor:pointer}
+.stale-badge{padding:2px 6px;border-radius:8px;font-size:7px;background:#2a1420;color:var(--danger);border:1px solid var(--danger)}
+.points-badge{padding:1px 7px;border-radius:8px;font-size:7px;background:#0e1d2e;color:#aeb9c8;border:1px solid var(--border)}
+.column-points{color:var(--muted);font-size:7px}
+.checklist{display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.checklist-item{display:flex;align-items:center;gap:8px;font-size:9px}
+.checklist-item.is-done span{text-decoration:line-through;color:var(--muted)}
+.checklist-add{display:flex;gap:8px;margin-bottom:14px}
+.checklist-add input{flex:1;height:31px;padding:0 8px;border-radius:7px;font-size:9px}
+.dependency-row{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.dependency-row select{flex:1;height:33px;padding:0 8px;border-radius:7px;font-size:9px}
+.dependency-link{color:var(--accent);cursor:pointer;text-decoration:underline;font-size:9px}
+.reaction-row{display:flex;gap:6px;margin-top:6px}
+.reaction-chip{display:flex;align-items:center;gap:4px;padding:2px 7px;border:1px solid var(--border);border-radius:10px;background:#0e1d2e;font-size:8px;cursor:pointer}
+.reaction-chip.is-active{border-color:var(--accent)}
+.log-select-checkbox{margin-right:4px}

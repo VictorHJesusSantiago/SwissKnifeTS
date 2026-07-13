@@ -12,3 +12,29 @@
 .tier-filter button.is-active { background: var(--accent-dark); color: var(--accent); border-color: var(--accent); }
 
 .blast-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px; background: rgba(248, 197, 106, .12); border: 1px solid rgba(248, 197, 106, .35); color: var(--warning); font-size: 11.5px; margin-top: 8px; }
+
+/* --- Network extra features (snapshot diff, cascade, notes, heatmap, compare, critical path) --- */
+.graph-node--diff .graph-node__circle { stroke: #b98bff; stroke-width: 3px; filter: drop-shadow(0 0 7px rgba(185, 139, 255, .6)); }
+.graph-node--compare .graph-node__circle { stroke: #6ce5c4; stroke-width: 3px; }
+.graph-node--dim { opacity: .18; }
+.graph-link--dim { opacity: .12 !important; }
+.graph-node__note { font-size: 13px; }
+.graph-node--cascade-down .graph-node__circle { fill: var(--danger) !important; stroke: var(--danger); transition: fill .3s ease; }
+
+.network-toolbar-2 { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.network-toolbar-2 select { background: var(--surface-2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 6px 10px; font-size: 12px; }
+
+.heatmap-legend { display: flex; align-items: center; gap: 8px; font-size: 11.5px; color: var(--muted); margin-top: 6px; }
+.heatmap-legend__bar { width: 90px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #3a6fd8, #ff5a3c); }
+
+.node-note-field { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.node-note-field textarea { resize: vertical; min-height: 56px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px; font-size: 12.5px; font-family: inherit; }
+
+.compare-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+.compare-panel__side { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; background: var(--surface-2); }
+.compare-panel__side h3 { margin: 0 0 8px; font-size: 13.5px; }
+.compare-panel__side dl { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; font-size: 12px; margin: 0; }
+.compare-panel__side dt { color: var(--muted); }
+
+.critical-path-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 12px 0; font-size: 12px; }
+.critical-path-controls select { background: var(--surface-2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 6px 10px; }

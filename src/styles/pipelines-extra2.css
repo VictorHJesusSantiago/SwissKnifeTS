@@ -1,0 +1,44 @@
+.flaky-badge { display: inline-flex; align-items: center; gap: 4px; }
+
+.pipeline-row__badges { display: flex; gap: 4px; margin-left: 6px; }
+
+.editor-stage-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.editor-stage-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: #0d1a2a; cursor: grab; }
+.editor-stage-row.is-dragging { opacity: .4; }
+.editor-stage-row strong { flex: 1; font-size: 11px; }
+.editor-add-row { display: flex; gap: 8px; }
+.editor-add-row input { flex: 1; background: #0d1a2a; border: 1px solid var(--border); border-radius: 7px; color: var(--text); padding: 7px 10px; font-size: 11px; }
+
+.cron-row { display: flex; align-items: center; gap: 8px; padding: 10px 18px; border-bottom: 1px solid var(--border); font-size: 11px; }
+.cron-row input, .cron-row select { background: #0d1a2a; border: 1px solid var(--border); border-radius: 7px; color: var(--text); padding: 6px 8px; font-size: 11px; }
+.cron-row__text { color: var(--muted); }
+
+.matrix-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(140px,1fr)); gap: 10px; padding: 12px 18px; }
+.matrix-cell { border: 1px solid var(--border); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.matrix-cell strong { font-size: 10.5px; }
+.matrix-platform-picker { display: flex; gap: 8px; padding: 10px 18px 0; flex-wrap: wrap; }
+.matrix-platform-picker label { display: flex; align-items: center; gap: 6px; font-size: 10.5px; }
+
+.run-annotation { margin: 6px 18px 0; }
+.run-annotation textarea { width: 100%; background: #0d1a2a; border: 1px solid var(--border); border-radius: 7px; color: var(--text); padding: 6px 8px; font-size: 10.5px; resize: vertical; min-height: 40px; }
+
+.breaker-tag { font-size: 9.5px; color: #ff8a8a; display: flex; align-items: center; gap: 4px; }
+
+.webhook-panel { border-top: 1px solid var(--border); }
+.webhook-panel__toggle { width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; background: transparent; border: 0; color: var(--text); cursor: pointer; font-size: 11px; }
+.webhook-log { max-height: 180px; overflow-y: auto; padding: 0 18px 12px; display: flex; flex-direction: column; gap: 5px; }
+.webhook-log__row { font-size: 9.5px; color: var(--muted); font-family: monospace; }
+.webhook-log__empty { padding: 0 18px 14px; font-size: 10.5px; color: var(--muted); }
+
+.dora-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 18px; }
+
+.dag-stage-fav { position: absolute; top: -6px; right: -8px; background: transparent; border: 0; cursor: pointer; color: var(--muted); }
+.dag-graph__node { position: absolute; }
+
+.replay-controls { display: flex; align-items: center; gap: 10px; padding: 10px 18px; border-top: 1px solid var(--border); flex-wrap: wrap; }
+.replay-controls select { background: #0d1a2a; border: 1px solid var(--border); border-radius: 7px; color: var(--text); padding: 5px 8px; font-size: 10.5px; }
+
+:root[data-theme="light"] .editor-stage-row { background: #f7f9fc; }
+:root[data-theme="light"] .cron-row input, :root[data-theme="light"] .cron-row select { background: #f7f9fc; }
+:root[data-theme="light"] .matrix-cell { background: #f7f9fc; }
+:root[data-theme="light"] .run-annotation textarea { background: #f7f9fc; }

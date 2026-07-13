@@ -1,0 +1,31 @@
+/* Estilos exclusivos da segunda leva de funcionalidades extras da VulnerabilitiesPage. Não editar global.css. */
+
+.vuln-package-table { padding: 6px 16px 16px; }
+
+.vuln-posture-grid { display: grid; grid-template-columns: 220px 1fr; gap: 16px; padding: 16px; }
+.vuln-posture-score { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.vuln-posture-score strong { font-size: 34px; }
+.vuln-posture-score span { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.vuln-posture-score.tone-critical strong { color: var(--danger); }
+.vuln-posture-score.tone-attention strong { color: var(--warning); }
+.vuln-posture-score.tone-good strong { color: var(--accent); }
+
+.vuln-detail-assignee { padding: 0 16px 12px; }
+.vuln-detail-assignee select { height: 30px; padding: 0 8px; border-radius: 6px; font-size: 8px; width: 100%; }
+
+.vuln-runbook-hint { margin: 0 16px 12px; padding: 10px 12px; border-radius: 8px; background: #0d1a2a; border: 1px solid var(--border); font-size: 8px; color: var(--muted); display: flex; gap: 8px; align-items: flex-start; }
+
+.vuln-exception-row { display: flex; gap: 8px; align-items: center; margin: 0 16px 12px; }
+.vuln-exception-row input { height: 30px; padding: 0 8px; border-radius: 6px; font-size: 8px; }
+.vuln-exception-expired { color: var(--danger); font-weight: 700; }
+
+.vuln-compare-toolbar { display: flex; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.vuln-compare-toolbar label { display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 8px; }
+.vuln-compare-toolbar select { height: 33px; padding: 0 8px; border-radius: 7px; font-size: 9px; }
+.vuln-compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px; }
+.vuln-compare-col { border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+.vuln-compare-col h4 { margin: 0 0 10px; font-size: 10px; }
+.vuln-compare-col-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 9px; border-top: 1px solid var(--border); }
+.vuln-compare-col-row:first-of-type { border-top: none; }
+
+.vuln-rescan-result { margin: 0 16px 12px; padding: 10px 12px; border-radius: 8px; background: #12332f; border: 1px solid #285a51; font-size: 8px; color: var(--accent); }

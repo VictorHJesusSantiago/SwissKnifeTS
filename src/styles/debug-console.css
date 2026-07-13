@@ -1,0 +1,7 @@
+.debug-console { position: fixed; z-index: 90; left: 16px; bottom: 16px; width: 420px; max-height: 320px; display: flex; flex-direction: column; border: 1px solid #2c4a44; border-radius: 10px; background: #06120e; box-shadow: 0 20px 60px #000a; font: 10px 'DM Mono', monospace; }
+.debug-console header { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid #1f362f; color: var(--accent); }
+.debug-console header span { flex: 1; }
+.debug-console header button { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 14px; }
+.debug-console__log { flex: 1; overflow-y: auto; padding: 8px 10px; color: #8fd9c4; }
+.debug-console__log div { padding: 1px 0; white-space: pre-wrap; word-break: break-word; }
+.debug-console input { border: 0; border-top: 1px solid #1f362f; padding: 8px 10px; background: transparent; color: #d5fff0; font: inherit; outline: none; }

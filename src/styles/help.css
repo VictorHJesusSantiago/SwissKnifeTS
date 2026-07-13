@@ -1,0 +1,9 @@
+.faq-group { margin-bottom: 14px; }
+.faq-list { padding: 6px 18px 16px; }
+.faq-item { padding: 12px 0; border-bottom: 1px solid var(--border); }
+.faq-item:last-child { border: 0; }
+.faq-item summary { cursor: pointer; font-size: 12px; font-weight: 700; list-style: none; }
+.faq-item summary::-webkit-details-marker { display: none; }
+.faq-item summary::before { content: '+ '; color: var(--accent); }
+.faq-item[open] summary::before { content: '– '; }
+.faq-item p { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }

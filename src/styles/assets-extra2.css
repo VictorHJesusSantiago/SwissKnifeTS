@@ -1,0 +1,62 @@
+/* Filtros combinados (owner + localização + criticidade) */
+.asset-filters-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* Seleção em massa / checkbox coluna */
+.asset-table.data-table--with-select .data-table__head,
+.asset-table.data-table--with-select .data-table__row { grid-template-columns: 28px 2fr 1fr 1fr 1fr 1fr 0.9fr 1fr 1.4fr; }
+.asset-row-check { display: flex; align-items: center; justify-content: center; }
+.asset-row--alert { background: rgba(255, 112, 130, 0.06); }
+
+/* Badge de reserva */
+.badge-reserved { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 1px 7px; border-radius: 20px; background: rgba(128, 151, 255, 0.18); color: #8097ff; font-size: 9px; font-weight: 700; }
+
+/* Alertas de auditoria */
+.audit-alert-panel__list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.audit-alert-panel__item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-radius: 8px; background: rgba(255,196,0,.1); font-size: 12px; }
+.audit-alert-panel__item small { color: var(--muted); display: block; }
+.audit-alert-panel__tag { padding: 2px 8px; border-radius: 20px; background: rgba(255,196,0,.22); color: #e0a800; font-size: 10px; font-weight: 700; white-space: nowrap; }
+
+/* Gráficos de distribuição */
+.distribution-panel__toggle { display: flex; gap: 8px; margin-bottom: 12px; }
+.distribution-panel__body { display: grid; grid-template-columns: 1fr; gap: 10px; }
+
+/* TCO */
+.tco-table { display: grid; gap: 6px; margin-top: 10px; }
+.tco-table__head, .tco-table__row { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 8px; font-size: 12px; padding: 6px 8px; }
+.tco-table__head { color: var(--muted); font-size: 11px; text-transform: uppercase; }
+.tco-table__row { border-radius: 8px; background: rgba(255,255,255,.03); }
+.tco-table__row strong { font-size: 12px; }
+
+/* Detalhe: seções extras */
+.asset-detail-section { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.asset-detail-section .eyebrow { display: block; margin-bottom: 8px; }
+.ownership-history { display: flex; flex-direction: column; gap: 6px; }
+.ownership-history__item { display: flex; justify-content: space-between; font-size: 12px; padding: 6px 8px; border-radius: 8px; background: rgba(255,255,255,.03); }
+.ownership-history__item small { color: var(--muted); }
+.inline-form { display: flex; gap: 8px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.inline-form input, .inline-form select { flex: 1; min-width: 160px; }
+
+.checklist-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.checklist-list__item { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 6px 8px; border-radius: 8px; background: rgba(255,255,255,.03); cursor: pointer; }
+.checklist-list__item.is-done { text-decoration: line-through; color: var(--muted); }
+
+.invoice-box { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 12px; }
+.invoice-box__meta { display: flex; flex-direction: column; }
+.invoice-box__meta small { color: var(--muted); }
+
+/* Sheet de etiquetas para impressão em lote (não usa .modal-backdrop para não ser ocultado no @media print) */
+.label-sheet-overlay { position: fixed; inset: 0; background: rgba(6, 10, 18, 0.72); display: flex; align-items: center; justify-content: center; z-index: 60; padding: 24px; }
+.label-sheet { background: var(--panel, #10192b); border-radius: 12px; padding: 20px; max-width: 900px; width: 100%; max-height: 88vh; overflow-y: auto; border: 1px solid var(--border); }
+.label-sheet__header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.label-sheet__grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; background: #fff; padding: 16px; border-radius: 8px; }
+.label-sheet__cell { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px; border: 1px dashed #ccc; border-radius: 6px; }
+.label-sheet__cell strong { font-size: 11px; color: #0a1726; text-align: center; }
+.label-sheet__cell small { font-size: 9px; color: #4a5f75; }
+
+@media print {
+  body * { visibility: hidden; }
+  .label-sheet-overlay, .label-sheet-overlay * { visibility: visible; }
+  .label-sheet-overlay { position: absolute; inset: 0; background: #fff; padding: 0; }
+  .label-sheet { max-height: none; overflow: visible; border: none; box-shadow: none; }
+  .label-sheet__header, .no-print { display: none !important; }
+}

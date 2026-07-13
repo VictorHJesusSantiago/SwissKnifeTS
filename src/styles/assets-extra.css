@@ -19,3 +19,36 @@
 
 .depreciation-row { display: flex; justify-content: space-between; font-size: 12px; padding: 6px 0; border-bottom: 1px solid var(--border); }
 .depreciation-row small { color: var(--muted); }
+
+.reserved-badge { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 20px; background: rgba(128,151,255,.2); color: #8097ff; font-size: 9px; font-weight: 700; }
+.criticality-badge { display: inline-block; padding: 1px 8px; border-radius: 20px; font-size: 9px; font-weight: 700; }
+.criticality-badge.is-critico { background: rgba(255,112,130,.2); color: #ff7082; }
+.criticality-badge.is-normal { background: rgba(128,151,255,.18); color: #8097ff; }
+.criticality-badge.is-baixo { background: rgba(111,215,163,.18); color: #6fd7a3; }
+
+.transfer-history { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; font-size: 11px; }
+.transfer-history div { display: flex; justify-content: space-between; color: var(--muted); }
+
+.checklist-panel { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.checklist-panel label { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 6px 0; }
+.checklist-panel label.is-done { color: var(--muted); text-decoration: line-through; }
+
+.invoice-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; font-size: 12px; }
+.invoice-row label.attach-file { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; padding: 5px 10px; border-radius: 20px; border: 1px solid var(--border); cursor: pointer; }
+.invoice-row input[type=file] { display: none; }
+
+.audit-alert-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.audit-alert-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; border-radius: 8px; background: rgba(255,159,67,.1); font-size: 12px; }
+.audit-alert-item small { color: var(--muted); display: block; }
+
+.print-labels-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding: 8px 0; }
+.print-label-card { border: 1px solid var(--border); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.print-label-card strong { font-size: 11px; text-align: center; }
+.print-label-card small { font-size: 10px; color: var(--muted); }
+
+.asset-dist-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 8px 18px 16px; }
+.asset-dist-grid > div { display: flex; flex-direction: column; gap: 8px; }
+.asset-dist-grid h3 { font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: .04em; margin: 0; }
+
+.reserve-form, .transfer-form { display: flex; flex-direction: column; gap: 12px; }
+.reserve-form .form-actions, .transfer-form .form-actions { display: flex; gap: 8px; justify-content: flex-end; }
