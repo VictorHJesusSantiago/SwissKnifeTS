@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Boxes, Bug, CornerDownLeft, GitBranch, Search, Star, TicketCheck } from 'lucide-react'
+import { Boxes, Bug, Clock, CornerDownLeft, GitBranch, Search, Star, TicketCheck } from 'lucide-react'
 import { navigation } from '../../config/navigation'
 import type { ModuleId } from '../../types'
 import { useFavorites } from '../../context/FavoritesContext'
+import { useNavigationStats } from '../../context/NavigationStatsContext'
 import { classNames } from '../../utils/format'
 import { searchEntities, type SearchEntityType } from '../../utils/searchIndex'
 
@@ -18,6 +19,7 @@ export function CommandPalette({ open, onClose, onNavigate }: { open: boolean; o
   const [index, setIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
   const { favorites } = useFavorites()
+  const { recentModules } = useNavigationStats()
 
   const results = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -59,6 +61,14 @@ export function CommandPalette({ open, onClose, onNavigate }: { open: boolean; o
       {favorites.length > 0 && !query && <div className="command-palette__section">
         <span>FAVORITOS</span>
         {favorites.slice(0, 5).map(f => <button key={`${f.module}-${f.id}`} onClick={() => { onNavigate(f.module); onClose() }}><Star size={14}/>{f.label}</button>)}
+      </div>}
+      {recentModules.length > 0 && !query && <div className="command-palette__section">
+        <span>NAVEGAÇÃO RECENTE</span>
+        {recentModules.slice(0, 5).map(id => {
+          const nav = navigation.find(n => n.id === id)
+          if (!nav) return null
+          return <button key={id} onClick={() => { onNavigate(id); onClose() }}><Clock size={14}/>{nav.label}</button>
+        })}
       </div>}
       <div className="command-palette__list">
         {results.map((r, i) => <button key={r.id} className={classNames('command-palette__item', i === index && 'is-active')} onMouseEnter={() => setIndex(i)} onClick={() => { onNavigate(r.id); onClose() }}>
