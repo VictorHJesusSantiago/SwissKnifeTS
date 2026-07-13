@@ -77,6 +77,43 @@ export interface SavedView {
   tag: string
 }
 
+export interface ChecklistItem {
+  id: string
+  text: string
+  done: boolean
+}
+
+export interface CommentReaction {
+  [emoji: string]: number
+}
+
+// Normaliza um título para comparação simples de similaridade (palavras em comum).
+export function normalizeTitle(title: string): string[] {
+  return title
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(new RegExp('[\\u0300-\\u036f]', 'g'), '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(word => word.length > 2)
+}
+
+// Retorna candidatos a duplicado com base em palavras em comum (similaridade >= 0.5).
+export function findDuplicateCandidates(title: string, existing: { id: string; title: string }[]) {
+  const words = new Set(normalizeTitle(title))
+  if (words.size === 0) return []
+  return existing
+    .map(ticket => {
+      const otherWords = new Set(normalizeTitle(ticket.title))
+      if (otherWords.size === 0) return { ticket, score: 0 }
+      const common = [...words].filter(w => otherWords.has(w)).length
+      const score = common / Math.max(words.size, otherWords.size)
+      return { ticket, score }
+    })
+    .filter(entry => entry.score >= 0.5)
+    .sort((a, b) => b.score - a.score)
+}
+
 // Converte o texto aproximado de "idade" do ticket (ex: "há 2 h", "agora", "há 3 dias") em horas decorridas.
 export function parseAgeToHours(age: string): number {
   const normalized = age.toLowerCase().trim()
