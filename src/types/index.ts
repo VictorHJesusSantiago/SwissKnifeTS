@@ -67,7 +67,7 @@ export interface Asset {
 export type ModuleId =
   | 'overview' | 'pipelines' | 'logs' | 'tickets' | 'network'
   | 'terraform' | 'kubernetes' | 'namespaces' | 'services'
-  | 'vulnerabilities' | 'capacity' | 'runbooks' | 'assets' | 'settings' | 'comparator'
+  | 'vulnerabilities' | 'capacity' | 'runbooks' | 'assets' | 'settings' | 'comparator' | 'help'
 
 export interface NotificationItem {
   id: string
