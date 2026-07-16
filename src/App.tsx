@@ -16,6 +16,10 @@ import { DemoModeProvider, useDemoMode } from './context/DemoModeContext'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { DebugConsole } from './components/debug/DebugConsole'
 import { ChangelogModal } from './components/changelog/ChangelogModal'
+import { IdleLockProvider } from './context/IdleLockContext'
+import { IdleLockOverlay } from './components/layout/IdleLockOverlay'
+import { OnlineStatusBanner } from './components/layout/OnlineStatusBanner'
+import { GlobalUndoProvider } from './context/GlobalUndoContext'
 import { useLocalStorage } from './hooks/useLocalStorage'
 import { APP_VERSION } from './data/changelog'
 import type { ModuleId } from './types'
@@ -90,6 +94,7 @@ function ShellInner() {
 
   const Page = pages[active]
   return <>
+    <OnlineStatusBanner/>
     {demo.active && <div className="demo-banner">Modo demonstração automática ativo <button onClick={demo.stop}>Parar</button></div>}
     <AppShell active={active} onNavigate={navigate}>
       <ErrorBoundary>
@@ -99,6 +104,7 @@ function ShellInner() {
       </ErrorBoundary>
     </AppShell>
     {showChangelog && <ChangelogModal onClose={() => setShowChangelog(false)}/>}
+    <IdleLockOverlay/>
   </>
 }
 
@@ -125,11 +131,15 @@ export default function App() {
                 <AuditProvider>
                   <FavoritesProvider>
                     <NavigationStatsProvider>
-                      <TourProvider>
-                        <Shell/>
-                        <TourOverlay/>
-                        <DebugConsole/>
-                      </TourProvider>
+                      <IdleLockProvider>
+                        <GlobalUndoProvider>
+                          <TourProvider>
+                            <Shell/>
+                            <TourOverlay/>
+                            <DebugConsole/>
+                          </TourProvider>
+                        </GlobalUndoProvider>
+                      </IdleLockProvider>
                     </NavigationStatsProvider>
                   </FavoritesProvider>
                 </AuditProvider>
