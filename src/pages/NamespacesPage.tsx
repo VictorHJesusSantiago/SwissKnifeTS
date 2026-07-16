@@ -1,4 +1,4 @@
-import { AlertTriangle, Box, CheckCircle2, ChevronDown, ChevronUp, Clock3, Download, FileCode2, GitCompareArrows, Plus, Star, Trash2 } from 'lucide-react'
+import { AlertTriangle, Box, CalendarClock, CheckCircle2, ChevronDown, ChevronUp, Clock3, Download, FileCode2, GitCompareArrows, Package, Plus, RotateCcw, Star, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Modal } from '../components/ui/Modal'
 import { PageHeader } from '../components/ui/PageHeader'
@@ -9,7 +9,9 @@ import { useRole } from '../context/RoleContext'
 import { useLocalStorage } from '../hooks/useLocalStorage'
 import { useI18n } from '../i18n/I18nContext'
 import { manifestTemplates, namespaceManifestSamples, seedNamespaceEvents, type NamespaceEvent } from '../data/kubernetesExtra2'
+import { NON_PROD_TTL_DAYS, RENEWAL_EXTENSION_DAYS, namespaceCreatedAt, namespaceReleases } from '../data/namespacesExtra3'
 import '../styles/namespaces-extra.css'
+import '../styles/namespaces-extra3.css'
 import { classNames } from '../utils/format'
 
 type Namespace={name:string;team:string;environment:string;cpu:string;memory:string;status:string;created:string;quota:{cpuUsedPct:number;memUsedPct:number;storageUsedPct:number};budget?:number}
@@ -79,6 +81,17 @@ const estimateCost = (ns: Namespace) => Math.round(ns.quota.cpuUsedPct * 6 + ns.
 
 const quotaTone = (pct: number) => pct >= 90 ? 'is-danger' : pct >= 75 ? 'is-warning' : ''
 
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** Item 6: non-prod namespaces expire N days after creation (mock TTL); each renewal adds more days. */
+function expiryFor(ns: Namespace, renewedDays: number) {
+ const createdIso = namespaceCreatedAt[ns.name]
+ const createdAt = createdIso ? new Date(createdIso) : new Date()
+ const expiresAt = new Date(createdAt.getTime() + (NON_PROD_TTL_DAYS + renewedDays) * DAY_MS)
+ const daysLeft = Math.ceil((expiresAt.getTime() - Date.now()) / DAY_MS)
+ return { expiresAt, daysLeft }
+}
+
 export default function NamespacesPage(){
  const { t } = useI18n()
  const { logAction } = useAudit()
@@ -97,6 +110,20 @@ export default function NamespacesPage(){
  const [compareA,setCompareA]=useState(initial[0].name)
  const [compareB,setCompareB]=useState(initial[1].name)
  const [showCompare,setShowCompare]=useState(false)
+
+ // --- item 6: non-prod namespace lifecycle / expiration ---
+ const [renewals,setRenewals]=useLocalStorage<Record<string,number>>('opsphere-namespace-renewals',{})
+
+ // --- item 8: release history panel ---
+ const [expandedReleases,setExpandedReleases]=useState<Set<string>>(new Set())
+ const toggleReleases=(name:string)=>setExpandedReleases(prev=>{const next=new Set(prev);next.has(name)?next.delete(name):next.add(name);return next})
+
+ const renewNamespace=(ns:Namespace)=>{
+  setRenewals(prev=>({...prev,[ns.name]:(prev[ns.name]||0)+RENEWAL_EXTENSION_DAYS}))
+  addNotification('Namespace renovado',`${ns.name}: prazo estendido por mais ${RENEWAL_EXTENSION_DAYS} dias.`,'healthy')
+  logAction('Namespaces: expiração renovada',`${ns.name} +${RENEWAL_EXTENSION_DAYS}d`)
+  addEvent(ns.name,{type:'other',message:`Expiração renovada (+${RENEWAL_EXTENSION_DAYS} dias)`})
+ }
 
  const create=()=>{
   if(!form.name||!form.team)return
@@ -166,6 +193,10 @@ export default function NamespacesPage(){
   const overBudget = item.budget !== undefined && cost > item.budget
   const nsEvents = events[item.name] || []
   const expanded = expandedEvents.has(item.name)
+  const isNonProd = item.environment !== 'Produção'
+  const { daysLeft } = isNonProd ? expiryFor(item, renewals[item.name] || 0) : { daysLeft: 0 }
+  const releases = namespaceReleases[item.name] || []
+  const releasesOpen = expandedReleases.has(item.name)
   return <article className="panel namespace-card" key={item.name}><header><div className="resource-icon"><Box/></div><div><h2>{item.name}</h2><span>{item.team}</span></div><button className="icon-button" title="Favoritar" onClick={()=>toggleFavorite({ id: item.name, module: 'namespaces', label: item.name })}><Star fill={isFavorite('namespaces', item.name) ? 'currentColor' : 'none'} size={16}/></button><button className="icon-button" disabled={!canEdit} title={!canEdit ? 'Ação bloqueada no modo visualizador' : undefined} onClick={()=>setItems(v=>v.filter(i=>i.name!==item.name))}><Trash2 size={16}/></button></header><div className={`provision-status ${item.status==='Ativo'?'is-active':''}`}>{item.status==='Ativo'?<CheckCircle2/>:<Clock3 className="spin"/>}{item.status}</div><dl><div><dt>{t('namespaces.environment')}</dt><dd>{item.environment}</dd></div><div><dt>{t('namespaces.cpu')}</dt><dd>{item.cpu}</dd></div><div><dt>{t('namespaces.memory')}</dt><dd>{item.memory}</dd></div><div><dt>{t('namespaces.created')}</dt><dd>{item.created}</dd></div></dl>
   <div className="quota-list">
    <div className="quota-row"><span className="quota-row__label"><span>{t('namespaces.quota.cpu')}</span><span>{item.quota.cpuUsedPct}%</span></span><div className={classNames('quota-track',quotaTone(item.quota.cpuUsedPct))}><i style={{width:`${item.quota.cpuUsedPct}%`}}/></div></div>
@@ -177,9 +208,17 @@ export default function NamespacesPage(){
    <input type="number" min={0} value={item.budget ?? 0} disabled={!canEdit} onChange={e=>setBudget(item.name, Number(e.target.value))}/>
    {overBudget && <span className="budget-alert"><AlertTriangle size={13}/> Custo estimado ultrapassa o orçamento definido.</span>}
   </div>
+  {isNonProd && <div className={classNames('ns-expiry', daysLeft<0?'is-expired':daysLeft<=3?'is-warning':'is-ok')}>
+   <span><CalendarClock size={14}/> {daysLeft<0?`Expirado há ${Math.abs(daysLeft)} dia(s)`:daysLeft===0?'Expira hoje':`Expira em ${daysLeft} dia(s)`} (namespace não-produção)</span>
+   <button disabled={!canEdit} title={!canEdit?'Ação bloqueada no modo visualizador':undefined} onClick={()=>renewNamespace(item)}><RotateCcw size={12}/> Renovar +{RENEWAL_EXTENSION_DAYS}d</button>
+  </div>}
   <div className="ns-events">
    <button className="ns-events__toggle" onClick={()=>toggleEvents(item.name)}>{expanded?<ChevronUp size={14}/>:<ChevronDown size={14}/>} Histórico de eventos ({nsEvents.length})</button>
    {expanded && <ul className="ns-events__list">{nsEvents.map(ev=><li key={ev.id}><span>{ev.message}</span><span>{ev.time}</span></li>)}</ul>}
+  </div>
+  <div className="ns-releases">
+   <button className="ns-releases__toggle" onClick={()=>toggleReleases(item.name)}>{releasesOpen?<ChevronUp size={14}/>:<ChevronDown size={14}/>} <Package size={14}/> Histórico de releases ({releases.length})</button>
+   {releasesOpen && <ul className="ns-releases__list">{releases.length===0?<li><span>Nenhum release registrado.</span></li>:releases.map((r,i)=><li key={`${r.release}-${r.version}-${i}`}><span><strong>{r.release}</strong> {r.version}</span><span>{r.date}</span></li>)}</ul>}
   </div>
   <button className="button button--full" onClick={()=>{openYaml(item);}}><FileCode2 size={15}/> {t('namespaces.editManifest')}</button>
  </article>

@@ -1,4 +1,4 @@
-import { AlertTriangle, Camera, Columns, Download, GitCompareArrows, Play, RotateCcw, Router, StickyNote, Star, Thermometer, Wifi, Zap } from 'lucide-react'
+import { AlertTriangle, Camera, Clock, Columns, Download, GitCompareArrows, History, Play, RotateCcw, Router, ShieldAlert, StickyNote, Star, Thermometer, Users, Wifi, Zap } from 'lucide-react'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { TopologyGraph, type TopologyGraphHandle } from '../components/graph/TopologyGraph'
 import { MetricCard } from '../components/ui/MetricCard'
@@ -7,8 +7,10 @@ import { useAudit } from '../context/AuditContext'
 import { useFavorites } from '../context/FavoritesContext'
 import { useNotifications } from '../context/NotificationContext'
 import { extraInfraLinks } from '../data/networkExtra'
+import { allTeams, nodeOwners, teamColors, type NetworkTeam } from '../data/networkExtra3'
 import { useLocalStorage } from '../hooks/useLocalStorage'
 import '../styles/network-extra.css'
+import '../styles/network-extra3.css'
 import { useI18n } from '../i18n/I18nContext'
 import type { GraphNode, Severity } from '../types'
 import { blastRadius, detectCycle } from '../utils/graphAnalysis'
@@ -21,6 +23,8 @@ const groups=Array.from(new Set(nodes.map(n=>n.group)))
 
 interface NodeSnapshot { id: string; health: Severity }
 type NodeAnnotations = Record<string, string>
+/** A named, timestamped snapshot of every node's health — the topology "time machine". */
+interface NamedSnapshot { id: string; label: string; timestamp: string; nodes: NodeSnapshot[] }
 
 /** Simple BFS over an undirected view of the link list, used for the critical-path highlight. */
 function bfsPath(from: string, to: string): string[] {
@@ -62,6 +66,38 @@ function metricsFor(id: string) {
  }
 }
 
+function hashOf(id: string): number {
+ let h = 0
+ for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0
+ return h
+}
+
+/** Item 3: deterministic mock uptime% per node id, derived from a simple string hash. */
+function uptimeFor(id: string): number {
+ const h = hashOf(id)
+ return Number((99.5 - (h % 150) / 100).toFixed(2))
+}
+
+function uptimeTone(pct: number): Severity {
+ if (pct >= 99.5) return 'healthy'
+ if (pct >= 99) return 'warning'
+ return 'critical'
+}
+
+const endIdOf = (v: string | { id: string }) => typeof v === 'string' ? v : v.id
+
+/** Item 4: nodes with many transitive dependents (blast radius) but at most one incident
+ * link are flagged as single-point-of-failure risks (no redundant path in/out). */
+function computeSpof(allNodes: GraphNode[], allLinks: typeof links): Set<string> {
+ const spof = new Set<string>()
+ allNodes.forEach(n => {
+  const dependents = blastRadius(n.id, allLinks).size
+  const incident = allLinks.filter(l => endIdOf(l.source as any) === n.id || endIdOf(l.target as any) === n.id).length
+  if (dependents >= 2 && incident <= 1) spof.add(n.id)
+ })
+ return spof
+}
+
 export default function NetworkPage(){
  const { t } = useI18n()
  const { logAction } = useAudit()
@@ -76,6 +112,16 @@ export default function NetworkPage(){
  // --- item 1: snapshot diff ---
  const [snapshot,setSnapshot]=useLocalStorage<NodeSnapshot[]|null>('opsphere-network-snapshot',null)
  const [showDiff,setShowDiff]=useState(false)
+
+ // --- item 1b: topology time machine (multiple named snapshots + time travel) ---
+ const [namedSnapshots,setNamedSnapshots]=useLocalStorage<NamedSnapshot[]>('opsphere-network-timeline',[])
+ const [timeTravelIndex,setTimeTravelIndex]=useState(-1) // -1 = live state
+
+ // --- item 2: ownership map by team ---
+ const [teamFilter,setTeamFilter]=useState<NetworkTeam|'all'>('all')
+
+ // --- item 4: single-point-of-failure risk score ---
+ const spofIds = useMemo(()=>computeSpof(nodes,links),[])
 
  // --- item 2: cascading failure simulation ---
  const [cascadeHealth,setCascadeHealth]=useState<Record<string,Severity>>({})
@@ -101,7 +147,20 @@ export default function NetworkPage(){
  const blast = useMemo(()=>blastRadius(selected.id,links),[selected])
  const criticalPath = useMemo(()=>showPath?bfsPath(pathFrom,pathTo):[],[showPath,pathFrom,pathTo])
 
- const effectiveNodes = useMemo(()=>nodes.map(n=>cascadeHealth[n.id]?{...n,health:cascadeHealth[n.id]}:n),[cascadeHealth])
+ const timeTravelSnapshot = timeTravelIndex>=0 ? namedSnapshots[timeTravelIndex] : null
+
+ const effectiveNodes = useMemo(()=>{
+  if (timeTravelSnapshot) {
+   const prevHealth = new Map(timeTravelSnapshot.nodes.map(s=>[s.id,s.health]))
+   return nodes.map(n=>prevHealth.has(n.id)?{...n,health:prevHealth.get(n.id)}:n)
+  }
+  return nodes.map(n=>cascadeHealth[n.id]?{...n,health:cascadeHealth[n.id]}:n)
+ },[cascadeHealth,timeTravelSnapshot])
+
+ const teamHighlightIds = useMemo(()=>{
+  if (teamFilter==='all') return new Set<string>()
+  return new Set(Object.keys(nodeOwners).filter(id=>nodeOwners[id]===teamFilter))
+ },[teamFilter])
 
  const diffIds = useMemo(()=>{
   if (!showDiff || !snapshot) return new Set<string>()
@@ -149,6 +208,28 @@ export default function NetworkPage(){
   logAction('Rede: snapshot de topologia salvo',`${snap.length} nós`)
  }
 
+ const saveNamedSnapshot=()=>{
+  const label = prompt('Nome do snapshot (ex: Antes da manutenção)', `Snapshot ${namedSnapshots.length+1}`)
+  if (label===null) return
+  const snap: NamedSnapshot = {
+   id: `snap-${Date.now()}`,
+   label: label.trim() || `Snapshot ${namedSnapshots.length+1}`,
+   timestamp: new Date().toLocaleString('pt-BR'),
+   nodes: effectiveNodes.map(n=>({id:n.id,health:n.health||'healthy'})),
+  }
+  setNamedSnapshots(prev=>[...prev,snap])
+  setTimeTravelIndex(-1)
+  addNotification('Snapshot da linha do tempo salvo',`"${snap.label}" foi adicionado à máquina do tempo da topologia.`,'healthy')
+  logAction('Rede: snapshot da linha do tempo salvo',snap.label)
+ }
+
+ const travelTo=(pos:number)=>{
+  // pos 0 = live; pos 1..n = namedSnapshots[pos-1]
+  const idx = pos<=0 ? -1 : pos-1
+  setTimeTravelIndex(idx)
+  logAction('Rede: viagem no tempo da topologia', idx<0 ? 'estado ao vivo' : namedSnapshots[idx]?.label || '')
+ }
+
  const compareSnapshot=()=>{
   if (!snapshot) { addNotification('Nenhum snapshot','Salve um snapshot antes de comparar.','warning'); return }
   setShowDiff(v=>!v)
@@ -194,10 +275,34 @@ export default function NetworkPage(){
   <button className={heatmap?'button button--primary':'button'} onClick={()=>setHeatmap(v=>!v)}><Thermometer size={15}/> Heatmap de tráfego</button>
   <button className={compareMode?'button button--primary':'button'} onClick={()=>{setCompareMode(v=>!v);setCompareIds([])}}><Columns size={15}/> Comparar 2 nós</button>
   <button className={showPath?'button button--primary':'button'} onClick={()=>setShowPath(v=>!v)}><Zap size={15}/> Caminho crítico</button>
+  <button className="button" onClick={saveNamedSnapshot}><History size={15}/> Salvar na linha do tempo</button>
   {cascading && <button className="button" disabled>Falha em propagação…</button>}
   {Object.keys(cascadeHealth).length>0 && <button className="button" onClick={resetCascade}>Reverter simulação de falha</button>}
  </div>
  {heatmap && <div className="heatmap-legend"><span>Baixo tráfego</span><i className="heatmap-legend__bar"/><span>Alto tráfego</span></div>}
+
+ {namedSnapshots.length>0 && <div className="critical-path-controls time-machine">
+  <Clock size={15}/>
+  <span className="time-machine__label">Máquina do tempo:</span>
+  <select value={timeTravelIndex+1} onChange={e=>travelTo(Number(e.target.value))}>
+   <option value={0}>Ao vivo (estado atual)</option>
+   {namedSnapshots.map((s,i)=><option key={s.id} value={i+1}>{s.label} — {s.timestamp}</option>)}
+  </select>
+  <input type="range" min={0} max={namedSnapshots.length} value={timeTravelIndex+1} onChange={e=>travelTo(Number(e.target.value))}/>
+  {timeTravelSnapshot && <span className="time-machine__label">Visualizando estado salvo em {timeTravelSnapshot.timestamp}</span>}
+ </div>}
+
+ <div className="critical-path-controls team-filter">
+  <Users size={15}/>
+  <span className="time-machine__label">Mapa de propriedade por time:</span>
+  <button className={teamFilter==='all'?'button button--primary':'button'} onClick={()=>setTeamFilter('all')}>Todos</button>
+  {allTeams.map(team=><button key={team} className={teamFilter===team?'button button--primary':'button'} onClick={()=>setTeamFilter(team)}><i className="team-filter__swatch" style={{background:teamColors[team]}}/>{team}</button>)}
+ </div>
+
+ {spofIds.size>0 && <div className="cycle-warning">
+  <ShieldAlert size={18}/>
+  <span><strong>Pontos únicos de falha detectados:</strong> {Array.from(spofIds).join(', ')}. Estes componentes possuem muitos dependentes e nenhum caminho redundante.</span>
+ </div>}
  {showPath && <div className="critical-path-controls">
   <span>Origem</span>
   <select value={pathFrom} onChange={e=>setPathFrom(e.target.value)}>{nodes.map(n=><option key={n.id} value={n.id}>{n.id}</option>)}</select>
@@ -207,8 +312,11 @@ export default function NetworkPage(){
  </div>}
  {compareMode && <div className="critical-path-controls"><span>Selecione até 2 nós no grafo para comparar. Selecionados: {compareIds.join(', ')||'nenhum'}</span></div>}
 
- <section className="graph-layout"><article className="panel graph-panel"><div className="graph-toolbar"><span><i className="dot dot--success"/>{t('network.operational')}</span><span><i className="dot dot--warning"/>{t('network.degraded')}</span><span>{t('network.zoomHint')}</span></div><TopologyGraph ref={graphRef} nodes={effectiveNodes} links={links} onSelect={select} hiddenGroups={hiddenGroups} blastNodeIds={blast} cycleNodeIds={cycle.cycleNodes} cycleLinkKeys={cycle.cycleLinks} selectedId={selected.id} diffNodeIds={diffIds} annotatedNodeIds={annotatedIds} heatmap={heatmap} pathNodeIds={showPath?new Set(criticalPath):undefined} compareNodeIds={compareMode?new Set(compareIds):undefined}/>{packet.length>0&&<div className="packet-path"><Zap size={15}/>{packet.map((p,i)=><span key={p}>{i>0&&'→'} {p}</span>)}</div>}</article>
+ <section className="graph-layout"><article className="panel graph-panel"><div className="graph-toolbar"><span><i className="dot dot--success"/>{t('network.operational')}</span><span><i className="dot dot--warning"/>{t('network.degraded')}</span><span>{t('network.zoomHint')}</span></div><TopologyGraph ref={graphRef} nodes={effectiveNodes} links={links} onSelect={select} hiddenGroups={hiddenGroups} blastNodeIds={blast} cycleNodeIds={cycle.cycleNodes} cycleLinkKeys={cycle.cycleLinks} selectedId={selected.id} diffNodeIds={diffIds} annotatedNodeIds={annotatedIds} heatmap={heatmap} pathNodeIds={showPath?new Set(criticalPath):undefined} compareNodeIds={compareMode?new Set(compareIds):undefined} teamColor={id=>teamColors[nodeOwners[id]]} teamHighlightIds={teamHighlightIds} spofNodeIds={spofIds}/>{packet.length>0&&<div className="packet-path"><Zap size={15}/>{packet.map((p,i)=><span key={p}>{i>0&&'→'} {p}</span>)}</div>}</article>
  <aside className="panel node-detail"><div className="node-detail__icon"><Router/></div><div style={{display:'flex',alignItems:'center',justifyContent:'space-between'}}><span className="eyebrow">{t('network.selectedComponent')}</span><button className="icon-button" title={t('pipelines.favorite')} onClick={()=>toggleFavorite({ id: selected.id, module: 'network', label: selected.id })}><Star fill={isFavorite('network', selected.id) ? 'currentColor' : 'none'} size={15}/></button></div><h2>{selected.id}</h2><span className={`health-label health-label--${selected.health}`}><i/>{selected.health==='healthy'?t('network.operational'):t('network.degraded')}</span><dl><div><dt>{t('network.type')}</dt><dd>{selected.group}</dd></div><div><dt>{t('network.privateIp')}</dt><dd>10.28.4.12</dd></div><div><dt>{t('network.region')}</dt><dd>sa-east-1</dd></div><div><dt>{t('network.throughput')}</dt><dd>1,8 Gbps</dd></div></dl><div className="mini-stat"><Wifi size={17}/><span><strong>14ms</strong> {t('network.currentLatency')}</span></div>{blast.size>0 && <div className="blast-badge"><AlertTriangle size={13}/> {blast.size} {t('network.blastRadius')}</div>}
+  <div><span className={`uptime-badge uptime-badge--${uptimeTone(uptimeFor(selected.id))}`}>{uptimeFor(selected.id)}% uptime (30d)</span></div>
+  {nodeOwners[selected.id] && <div style={{marginTop:6,fontSize:12,color:'var(--muted)'}}>Time responsável: <strong style={{color:teamColors[nodeOwners[selected.id]]}}>{nodeOwners[selected.id]}</strong></div>}
+  {spofIds.has(selected.id) && <div className="spof-badge"><ShieldAlert size={14}/> Ponto único de falha (SPOF)</div>}
   <button className="button button--full" style={{marginTop:10}} disabled={cascading} onClick={()=>simulateOutage(selected)}><AlertTriangle size={15}/> Simular queda</button>
   <div className="node-note-field">
    <label style={{display:'flex',alignItems:'center',gap:6,fontSize:12,color:'var(--muted)'}}><StickyNote size={14}/> Anotação do componente</label>
