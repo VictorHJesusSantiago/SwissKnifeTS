@@ -34,12 +34,18 @@ interface Props {
   extraNodeClass?: (id: string) => string
   /** Selected pair of node ids for side-by-side comparison mode. */
   compareNodeIds?: Set<string>
+  /** Returns the owning-team color for a node id, drawn as an outer ring (ownership map). */
+  teamColor?: (id: string) => string | undefined
+  /** When non-empty, only these node ids are drawn at full opacity (team filter); others dim. */
+  teamHighlightIds?: Set<string>
+  /** Node ids flagged as single-point-of-failure risk; rendered with a warning icon/ring. */
+  spofNodeIds?: Set<string>
 }
 
 const endId = (v: string | { id: string }) => typeof v === 'string' ? v : v.id
 
 export const TopologyGraph = forwardRef<TopologyGraphHandle, Props>(function TopologyGraph(
-  { nodes, links, onSelect, hiddenGroups, blastNodeIds, cycleNodeIds, cycleLinkKeys, selectedId, diffNodeIds, annotatedNodeIds, heatmap, pathNodeIds, extraNodeClass, compareNodeIds }, ref,
+  { nodes, links, onSelect, hiddenGroups, blastNodeIds, cycleNodeIds, cycleLinkKeys, selectedId, diffNodeIds, annotatedNodeIds, heatmap, pathNodeIds, extraNodeClass, compareNodeIds, teamColor, teamHighlightIds, spofNodeIds }, ref,
 ) {
   const svgRef = useRef<SVGSVGElement>(null)
   const posRef = useRef<Map<string, { x: number; y: number }>>(new Map())
@@ -89,15 +95,21 @@ export const TopologyGraph = forwardRef<TopologyGraphHandle, Props>(function Top
         diffNodeIds?.has(d.id) ? 'graph-node--diff' : '',
         compareNodeIds?.has(d.id) ? 'graph-node--compare' : '',
         pathNodeIds && pathNodeIds.size > 0 && !pathNodeIds.has(d.id) ? 'graph-node--dim' : '',
+        teamHighlightIds && teamHighlightIds.size > 0 && !teamHighlightIds.has(d.id) ? 'graph-node--dim' : '',
+        spofNodeIds?.has(d.id) ? 'graph-node--spof' : '',
         extraNodeClass ? extraNodeClass(d.id) : '',
       ].filter(Boolean).join(' '))
       .on('click', (_, d) => onSelect?.(d))
 
+    group.filter(d => !!teamColor?.(d.id)).append('circle').attr('r', 28).attr('fill', 'none')
+      .attr('stroke', d => teamColor?.(d.id) || 'none').attr('stroke-width', 2.5).attr('class', 'graph-node__team-ring')
     group.append('circle').attr('r', 23).attr('class', d => `graph-node__circle graph-node__circle--${d.health || d.group}`)
     group.append('text').attr('y', 39).attr('text-anchor', 'middle').text(d => d.id)
     group.append('text').attr('text-anchor', 'middle').attr('dy', '.35em').attr('class', 'graph-node__initial').text(d => d.id.slice(0, 2).toUpperCase())
     group.filter(d => !!annotatedNodeIds?.has(d.id)).append('text')
       .attr('x', 16).attr('y', -14).attr('class', 'graph-node__note').attr('text-anchor', 'middle').text('📝')
+    group.filter(d => !!spofNodeIds?.has(d.id)).append('text')
+      .attr('x', -16).attr('y', -14).attr('class', 'graph-node__spof-icon').attr('text-anchor', 'middle').text('⚠')
 
     const drag = d3.drag<SVGGElement, SimulationNode>()
       .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(.3).restart(); d.fx = d.x; d.fy = d.y })
@@ -117,7 +129,7 @@ export const TopologyGraph = forwardRef<TopologyGraphHandle, Props>(function Top
     })
 
     return () => { simulation.stop(); if (animRef.current) cancelAnimationFrame(animRef.current) }
-  }, [nodes, links, onSelect, hiddenGroups, blastNodeIds, cycleNodeIds, cycleLinkKeys, selectedId, diffNodeIds, annotatedNodeIds, heatmap, pathNodeIds, extraNodeClass, compareNodeIds])
+  }, [nodes, links, onSelect, hiddenGroups, blastNodeIds, cycleNodeIds, cycleLinkKeys, selectedId, diffNodeIds, annotatedNodeIds, heatmap, pathNodeIds, extraNodeClass, compareNodeIds, teamColor, teamHighlightIds, spofNodeIds])
 
   useImperativeHandle(ref, () => ({
     playTrace(path, onDone) {
