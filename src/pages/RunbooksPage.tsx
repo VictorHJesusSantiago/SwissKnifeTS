@@ -1,5 +1,5 @@
 import { AlertTriangle, BookOpen, Check, ChevronRight, Clock3, Copy, FileDown, GitBranch, GitFork, History, ImagePlus, Link2, Maximize, Minimize, Pencil, PlayCircle, Plus, RotateCcw, Search, Star, Timer } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Badge } from '../components/ui/Badge'
 import { Modal } from '../components/ui/Modal'
 import { PageHeader } from '../components/ui/PageHeader'
@@ -13,6 +13,7 @@ import { useLocalStorage } from '../hooks/useLocalStorage'
 import { useI18n } from '../i18n/I18nContext'
 import { classNames } from '../utils/format'
 import '../styles/runbooks-extra.css'
+import '../styles/runbooksExtra3.css'
 
 interface StepImage { url: string; name: string; type: string }
 
@@ -95,6 +96,9 @@ export default function RunbooksPage() {
   const [pendingRatingId, setPendingRatingId] = useState<string | null>(null)
   const [ratingValue, setRatingValue] = useState(0)
   const [ratingComment, setRatingComment] = useState('')
+
+  // Item 4 — ranking de eficácia + Item 5 — sugestão por tipo de incidente
+  const [suggestionType, setSuggestionType] = useState('')
 
   const playerRef = useRef<HTMLElement>(null)
   const [presenting, setPresenting] = useState(false)
@@ -250,6 +254,22 @@ export default function RunbooksPage() {
   const selectedIsStale = isStale(selected.lastEditedAt)
   const stepImagesForSelected = stepImages[selected.id] || {}
 
+  // Item 4 — ranking de eficácia dos runbooks (nota média das avaliações pós-execução)
+  const effectivenessRanking = useMemo(() => runbooks.map(rb => {
+    const execs = executions.filter(e => e.runbookId === rb.id)
+    const rated = execs.filter(e => typeof e.rating === 'number')
+    const avg = rated.length ? rated.reduce((a, e) => a + (e.rating || 0), 0) / rated.length : 0
+    return { runbook: rb, avgRating: avg, ratedCount: rated.length, execCount: execs.length }
+  }).sort((a, b) => b.avgRating - a.avgRating || b.execCount - a.execCount), [runbooks, executions])
+
+  // Item 5 — sugestão automática por tipo de incidente (compatibilidade de tipo + nota de eficácia)
+  const suggestedRunbooks = useMemo(() => {
+    if (!suggestionType) return []
+    return effectivenessRanking
+      .filter(r => r.runbook.incidentType === suggestionType)
+      .sort((a, b) => b.avgRating - a.avgRating || b.execCount - a.execCount)
+  }, [effectivenessRanking, suggestionType])
+
   return <>
     <PageHeader eyebrow={t('runbooks.eyebrow')} title={t('runbooks.title')} description={t('runbooks.description')} actions={<>
       <button className="button button--compact" onClick={exportPlaybook}><FileDown size={15} /> {t('runbooks.exportPlaybook')}</button>
@@ -381,6 +401,43 @@ export default function RunbooksPage() {
             </div>)
           : <div className="empty-compact"><Clock3 /><span>{t('runbooks.history.empty')}</span></div>}
       </aside>
+    </section>
+
+    <section className="runbook-layout">
+      <article className="panel">
+        <div className="panel__header"><div><span className="eyebrow">{t('runbooks.ranking.eyebrow')}</span><h2>{t('runbooks.ranking.title')}</h2></div><Star size={18} /></div>
+        <div className="ranking-list">
+          {effectivenessRanking.map((r, i) => <div className="ranking-list__row" key={r.runbook.id}>
+            <span className="rank-badge">{i + 1}</span>
+            <span><strong>{r.runbook.title}</strong><small>{r.runbook.category} · {r.runbook.incidentType}</small></span>
+            <span className="ranking-list__stars">{r.ratedCount > 0 ? `${r.avgRating.toFixed(1)}/5` : t('runbooks.ranking.noRatings')}</span>
+            <span>{r.execCount} {t('runbooks.ranking.executions')}</span>
+          </div>)}
+        </div>
+      </article>
+
+      <article className="panel">
+        <div className="panel__header"><div><span className="eyebrow">{t('runbooks.suggestions.eyebrow')}</span><h2>{t('runbooks.suggestions.title')}</h2></div><GitFork size={18} /></div>
+        <label className="suggestions-panel__select">{t('runbooks.suggestions.selectLabel')}
+          <select value={suggestionType} onChange={e => setSuggestionType(e.target.value)}>
+            <option value="">{t('runbooks.suggestions.selectPlaceholder')}</option>
+            {incidentTypes.map(it => <option key={it}>{it}</option>)}
+          </select>
+        </label>
+        {!suggestionType
+          ? <div className="empty-compact"><Search /><span>{t('runbooks.suggestions.empty')}</span></div>
+          : suggestedRunbooks.length === 0
+            ? <div className="empty-compact"><Search /><span>{t('runbooks.suggestions.noneForType')}</span></div>
+            : <div className="suggestions-panel__list">
+                {suggestedRunbooks.map(r => <div className="suggestions-panel__item" key={r.runbook.id}>
+                  <span><strong>{r.runbook.title}</strong><small>{r.ratedCount > 0 ? `${r.avgRating.toFixed(1)}/5 · ${r.execCount} ${t('runbooks.ranking.executions')}` : t('runbooks.ranking.noRatings')}</small></span>
+                  <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span className="suggestions-panel__match">{t('runbooks.suggestions.matchLabel')}</span>
+                    <button className="button button--small" onClick={() => selectRunbook(r.runbook)}>{t('runbooks.suggestions.view')}</button>
+                  </span>
+                </div>)}
+              </div>}
+      </article>
     </section>
 
     {templateModal && <Modal title={t('runbooks.modal.title')} onClose={() => setTemplateModal(false)}>
