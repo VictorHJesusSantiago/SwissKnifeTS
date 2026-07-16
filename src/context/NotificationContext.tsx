@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
 import { useLocalStorage } from '../hooks/useLocalStorage'
+import { useUIPrefs } from './UIPrefsContext'
+import { playBeep } from '../utils/sound'
 import type { NotificationItem, Severity } from '../types'
 
 interface Toast extends NotificationItem { }
@@ -24,11 +26,13 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     { id: 'n3', title: 'Namespace provisionado', message: 'staging-payments está pronto para uso.', tone: 'healthy', time: 'há 3 h', read: true },
   ])
   const [toasts, setToasts] = useState<Toast[]>([])
+  const { soundEnabled } = useUIPrefs()
 
   const addNotification: NotificationCtx['addNotification'] = (title, message, tone = 'info') => {
     const item: NotificationItem = { id: `n${Date.now()}`, title, message, tone, time: 'agora', read: false }
     setNotifications(list => [item, ...list].slice(0, 50))
     setToasts(list => [...list, item])
+    if (soundEnabled) playBeep(tone)
     setTimeout(() => setToasts(list => list.filter(t => t.id !== item.id)), 5000)
   }
 
