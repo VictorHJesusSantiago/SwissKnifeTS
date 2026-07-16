@@ -18,6 +18,12 @@ interface UIPrefsCtx {
   toggleKeyboardOnly: () => void
   verbose: boolean
   toggleVerbose: () => void
+  soundEnabled: boolean
+  toggleSound: () => void
+  anonymizeMode: boolean
+  toggleAnonymize: () => void
+  watermarkEnabled: boolean
+  toggleWatermark: () => void
 }
 
 const Ctx = createContext<UIPrefsCtx | null>(null)
@@ -38,6 +44,9 @@ export function UIPrefsProvider({ children }: { children: ReactNode }) {
   const [accentColor, setAccentColor] = useLocalStorage<AccentColor>('opsphere-accent-color', 'teal')
   const [keyboardOnly, setKeyboardOnly] = useLocalStorage('opsphere-keyboard-only', false)
   const [verbose, setVerbose] = useLocalStorage('opsphere-verbose', false)
+  const [soundEnabled, setSoundEnabled] = useLocalStorage('opsphere-sound-enabled', false)
+  const [anonymizeMode, setAnonymizeMode] = useLocalStorage('opsphere-anonymize-mode', false)
+  const [watermarkEnabled, setWatermarkEnabled] = useLocalStorage('opsphere-watermark-enabled', false)
 
   useEffect(() => {
     const root = document.documentElement
@@ -45,9 +54,11 @@ export function UIPrefsProvider({ children }: { children: ReactNode }) {
     root.classList.toggle('presentation-mode', presentationMode)
     root.classList.toggle('reading-mode', readingMode)
     root.classList.toggle('keyboard-only', keyboardOnly)
+    root.classList.toggle('anonymize-mode', anonymizeMode)
+    root.classList.toggle('watermark-mode', watermarkEnabled)
     root.style.setProperty('--ui-scale', String(uiScale / 100))
     root.style.setProperty('--accent', accentColors[accentColor])
-  }, [highContrast, presentationMode, readingMode, uiScale, accentColor, keyboardOnly])
+  }, [highContrast, presentationMode, readingMode, uiScale, accentColor, keyboardOnly, anonymizeMode, watermarkEnabled])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -65,6 +76,9 @@ export function UIPrefsProvider({ children }: { children: ReactNode }) {
     accentColor, setAccentColor,
     keyboardOnly, toggleKeyboardOnly: () => setKeyboardOnly(v => !v),
     verbose, toggleVerbose: () => setVerbose(v => !v),
+    soundEnabled, toggleSound: () => setSoundEnabled(v => !v),
+    anonymizeMode, toggleAnonymize: () => setAnonymizeMode(v => !v),
+    watermarkEnabled, toggleWatermark: () => setWatermarkEnabled(v => !v),
   }}>{children}</Ctx.Provider>
 }
 
