@@ -1,8 +1,10 @@
 import '../styles/pipelines-extra.css'
 import '../styles/pipelines-extra2.css'
+import '../styles/pipelines-extra3.css'
 import {
-  AlertOctagon, ArrowRight, Check, CheckCircle2, ChevronDown, Circle, Clock3, Edit3, FastForward,
-  GitBranch, Grid3x3, GripVertical, Pause, Play, Radio, RefreshCw, RotateCcw, Star, Trash2, Users, X, XCircle,
+  AlertOctagon, ArrowRight, Check, CheckCircle2, ChevronDown, Circle, Clock3, DollarSign, Download, Edit3,
+  FastForward, GitBranch, Grid3x3, GripVertical, History, Package, Pause, Play, Radio, RefreshCw, RotateCcw,
+  Square, Star, Trash2, Users, X, XCircle,
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { BarChart } from '../components/charts/BarChart'
@@ -12,6 +14,7 @@ import { Modal } from '../components/ui/Modal'
 import { PageHeader } from '../components/ui/PageHeader'
 import { useAudit } from '../context/AuditContext'
 import { useFavorites } from '../context/FavoritesContext'
+import { useGlobalUndo } from '../context/GlobalUndoContext'
 import { useNotifications } from '../context/NotificationContext'
 import { useRole } from '../context/RoleContext'
 import { useLocalStorage } from '../hooks/useLocalStorage'
@@ -21,9 +24,13 @@ import {
   BREAKER_AUTHORS, BUILD_PLATFORMS, breakerFor, computeDora, isFlaky, makeWebhookEntry,
   simulateMatrixResult, type BuildPlatform, type WebhookLogEntry,
 } from '../data/pipelinesExtra2'
+import {
+  artifactFor, downloadArtifact, estimateMonthlyCost, estimateRunCost, PIPELINE_TRIGGER_CHAIN,
+  COST_PER_MINUTE_BRL,
+} from '../data/pipelinesExtra3'
 import { useI18n } from '../i18n/I18nContext'
 import type { Pipeline, Status } from '../types'
-import { classNames } from '../utils/format'
+import { classNames, formatCurrency } from '../utils/format'
 
 type Stage = { name: string; status: Status; duration: string }
 type ReplaySpeed = 1 | 2 | 4
@@ -91,12 +98,43 @@ function PipelineDag({ stages, pipelineId, isFavorite, toggleFavorite }: {
   </div>
 }
 
+// Item 5: meta-DAG mock entre pipelines — cadeia fixa de disparo definida em PIPELINE_TRIGGER_CHAIN.
+function MetaDag({ pipelines, selectedId, onSelect }: { pipelines: Pipeline[]; selectedId: number; onSelect: (id: number) => void }) {
+  const positions: Record<number, { x: number; y: number }> = {}
+  pipelines.forEach((p, i) => { positions[p.id] = { x: 70 + i * 150, y: 40 } })
+  const edges: { from: number; to: number }[] = []
+  pipelines.forEach(p => (PIPELINE_TRIGGER_CHAIN[p.id] ?? []).forEach(to => { if (positions[to]) edges.push({ from: p.id, to }) }))
+
+  return <div className="meta-dag-wrap">
+    <svg className="meta-dag-svg" viewBox={`0 0 ${70 + pipelines.length * 150} 90`}>
+      <defs>
+        <marker id="meta-dag-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+          <path d="M0,0 L8,4 L0,8 Z" fill="var(--muted)"/>
+        </marker>
+      </defs>
+      {edges.map(e => {
+        const a = positions[e.from], b = positions[e.to]
+        return <line key={`${e.from}-${e.to}`} className="meta-dag-edge" x1={a.x + 60} y1={a.y + 20} x2={b.x} y2={b.y + 20}/>
+      })}
+      {pipelines.map(p => {
+        const pos = positions[p.id]
+        return <g key={p.id} className={classNames('meta-dag-node', p.id === selectedId && 'is-selected')} onClick={() => onSelect(p.id)}>
+          <rect x={pos.x} y={pos.y} width={120} height={40} rx={9}/>
+          <text x={pos.x + 60} y={pos.y + 18} textAnchor="middle">{p.name}</text>
+          <text className="meta-dag-node__sub" x={pos.x + 60} y={pos.y + 31} textAnchor="middle">#{p.id} · {p.status}</text>
+        </g>
+      })}
+    </svg>
+  </div>
+}
+
 export default function PipelinesPage() {
   const { t } = useI18n()
   const { logAction } = useAudit()
   const { addNotification } = useNotifications()
   const { isFavorite, toggleFavorite } = useFavorites()
   const { canEdit } = useRole()
+  const { registerUndo } = useGlobalUndo()
   const [pipelines, setPipelines] = useState(source)
   const [selected, setSelected] = useState<Pipeline | null>(source[1])
   const [running, setRunning] = useState(false)
@@ -135,8 +173,24 @@ export default function PipelinesPage() {
   const [replaySpeed, setReplaySpeed] = useState<ReplaySpeed>(1)
   const replayTimer = useRef<number | null>(null)
 
+  // --- Item 8: rollback de deploy ---
+  const [rollbackOpen, setRollbackOpen] = useState(false)
+  const [rollbackPick, setRollbackPick] = useState<PipelineRun | null>(null)
+
+  // --- Item 9: simulação de deploy canário / blue-green ---
+  const [canaryActive, setCanaryActive] = useState(false)
+  const [canaryPaused, setCanaryPaused] = useState(false)
+  const [canaryProgress, setCanaryProgress] = useState(0)
+  const canaryTimer = useRef<number | null>(null)
+
   const history = selected ? getHistoryFor(selected.id) : []
   const dora = computeDora(pipelines)
+
+  // --- Item 6: custo estimado por execução ---
+  const monthlyRunCost = estimateMonthlyCost(history)
+
+  // --- Item 8: candidatos de rollback (últimas execuções bem-sucedidas do histórico) ---
+  const successfulRuns = history.filter(r => r.status === 'success').slice(0, 5)
 
   const updatePipeline = (id: number, patch: Partial<Pipeline> | ((p: Pipeline) => Pipeline)) => {
     setPipelines(list => list.map(item => item.id === id
@@ -281,6 +335,89 @@ export default function PipelinesPage() {
   }, [replaying, replaySpeed, replayStages.length])
   useEffect(() => { stopReplay(); setReplayIndex(0) }, [selected?.id])
 
+  // --- Item 5: navegação pela meta-DAG ---
+  const selectPipelineById = (id: number) => {
+    const target = pipelines.find(p => p.id === id)
+    if (target) setSelected(target)
+  }
+
+  // --- Item 8: rollback de deploy ---
+  const openRollback = () => {
+    setRollbackPick(successfulRuns[0] ?? null)
+    setRollbackOpen(true)
+  }
+  const confirmRollback = () => {
+    if (!selected || !rollbackPick) return
+    const previous = { ...selected }
+    const restoredStages = selected.stages.map((s, i) => {
+      const runStage = rollbackPick.stages[i]
+      return runStage ? { ...s, status: 'success' as const, duration: `${runStage.durationSeconds}s` } : s
+    })
+    updatePipeline(selected.id, item => ({
+      ...item,
+      status: 'success',
+      duration: `${rollbackPick.durationSeconds}s`,
+      updated: `restaurado da execução #${rollbackPick.runNumber}`,
+      stages: restoredStages,
+    }))
+    addNotification('Rollback aplicado', `"${selected.name}" restaurado para a execução #${rollbackPick.runNumber}.`, 'warning')
+    logAction('Rollback de deploy', `Pipeline "${selected.name}" revertido para a execução #${rollbackPick.runNumber}`)
+    registerUndo(`Rollback de "${selected.name}" desfeito`, () => {
+      updatePipeline(previous.id, () => previous)
+    })
+    setRollbackOpen(false)
+  }
+
+  // --- Item 9: simulação de deploy canário / blue-green ---
+  const stopCanaryTimer = () => { if (canaryTimer.current) { window.clearInterval(canaryTimer.current); canaryTimer.current = null } }
+  const startCanary = () => {
+    if (!selected) return
+    setCanaryActive(true)
+    setCanaryPaused(false)
+    setCanaryProgress(0)
+    logAction('Rollout canário iniciado', `Migração progressiva de tráfego iniciada para "${selected.name}"`)
+    stopCanaryTimer()
+    canaryTimer.current = window.setInterval(() => {
+      setCanaryProgress(p => {
+        const next = Math.min(100, p + 10)
+        if (next >= 100) {
+          stopCanaryTimer()
+          addNotification('Rollout concluído', `100% do tráfego de "${selected.name}" migrado.`, 'healthy')
+          logAction('Rollout canário concluído', `Migração de tráfego de "${selected.name}" finalizada em 100%`)
+        }
+        return next
+      })
+    }, 700)
+  }
+  const togglePauseCanary = () => {
+    setCanaryPaused(paused => {
+      const next = !paused
+      if (next) stopCanaryTimer()
+      else {
+        canaryTimer.current = window.setInterval(() => {
+          setCanaryProgress(p => {
+            const nextP = Math.min(100, p + 10)
+            if (nextP >= 100) stopCanaryTimer()
+            return nextP
+          })
+        }, 700)
+      }
+      return next
+    })
+  }
+  const abortCanary = () => {
+    stopCanaryTimer()
+    setCanaryActive(false)
+    setCanaryPaused(false)
+    setCanaryProgress(0)
+    if (selected) {
+      addNotification('Rollout abortado', `Migração de tráfego de "${selected.name}" abortada.`, 'critical')
+      logAction('Rollout canário abortado', `Migração de tráfego de "${selected.name}" abortada em ${canaryProgress}%`)
+    }
+  }
+  useEffect(() => () => stopCanaryTimer(), [])
+  useEffect(() => { stopCanaryTimer(); setCanaryActive(false); setCanaryPaused(false); setCanaryProgress(0) }, [selected?.id])
+
   const gateStageIndex = selected?.stages.findIndex(s => s.name === 'Deploy' && s.status === 'pending') ?? -1
   const hasPendingGate = gateStageIndex !== undefined && gateStageIndex >= 0
     && selected?.stages.slice(0, gateStageIndex).every(s => s.status === 'success')
@@ -321,8 +458,14 @@ export default function PipelinesPage() {
             <button className="button button--tiny" disabled={history.length < 2} onClick={openCompare}>{t('pipelines.compareRuns')}</button>
             <button className="button button--tiny" disabled={!canEdit} title={!canEdit ? t('pipelines.viewerBlocked') : undefined} onClick={openEditor}><Edit3 size={13}/> {t('pipelines.editStages')}</button>
             <button className="button button--tiny" onClick={()=>setMatrixOpen(v=>!v)}><Grid3x3 size={13}/> {t('pipelines.matrixTitle')}</button>
+            <button className="button button--tiny" disabled={!canEdit || successfulRuns.length === 0} title={!canEdit ? t('pipelines.viewerBlocked') : undefined} onClick={openRollback}><History size={13}/> {t('pipelines.rollbackButton')}</button>
           </div>
         </div>
+
+        {/* Item 5: meta-DAG entre pipelines */}
+        <div className="panel__header"><div><span className="eyebrow">{t('pipelines.dagChainEyebrow')}</span><h2>{t('pipelines.dagChainTitle')}</h2></div></div>
+        <p style={{padding:'0 18px', fontSize:11, color:'var(--muted)'}}>{t('pipelines.dagChainHint')}</p>
+        <MetaDag pipelines={pipelines} selectedId={selected.id} onSelect={selectPipelineById}/>
 
         <PipelineDag stages={selected.stages} pipelineId={selected.id} isFavorite={isFavorite} toggleFavorite={toggleFavorite}/>
 
@@ -378,6 +521,51 @@ export default function PipelinesPage() {
         <div className="panel__header"><div><span className="eyebrow">{t('pipelines.historyEyebrow')}</span><h2>{t('pipelines.historyTitle')}</h2></div></div>
         <div className="history-chart-wrap">
           <BarChart suffix="s" data={history.slice(0,8).map(r => ({ label: `#${r.runNumber}`, value: r.durationSeconds, color: r.status==='failed' ? '#e05d5d' : undefined }))}/>
+        </div>
+
+        {/* Item 6: custo estimado por execução */}
+        <div className="panel__header"><div><span className="eyebrow">{t('pipelines.costEyebrow')}</span><h2>{t('pipelines.costTitle')}</h2></div><DollarSign size={18}/></div>
+        <div className="cost-panel">
+          <div className="cost-summary">
+            <div className="cost-summary__item"><span>{t('pipelines.costPerMinute')}</span><strong>{formatCurrency(COST_PER_MINUTE_BRL)}</strong></div>
+            <div className="cost-summary__item"><span>{t('pipelines.costTotalMonth')}</span><strong>{formatCurrency(monthlyRunCost)}</strong></div>
+          </div>
+          <div className="cost-table">
+            {history.slice(0,8).map(r => <div className="cost-table__row" key={r.id}>
+              <span>#{r.runNumber}</span>
+              <span className="grow">{t('pipelines.costDuration')}: {r.durationSeconds}s</span>
+              <strong>{formatCurrency(estimateRunCost(r))}</strong>
+            </div>)}
+          </div>
+        </div>
+
+        {/* Item 7: registro de artefatos simulado */}
+        <div className="panel__header"><div><span className="eyebrow">{t('pipelines.artifactsEyebrow')}</span><h2>{t('pipelines.artifactsTitle')}</h2></div><Package size={18}/></div>
+        <div className="artifacts-list">
+          {history.slice(0,8).map(r => {
+            const artifact = artifactFor(r)
+            return <div className="artifacts-row" key={r.id}>
+              <span className="artifacts-row__name">{artifact.name}</span>
+              <span className="artifacts-row__size">{artifact.sizeMb} MB</span>
+              <button className="button button--tiny" onClick={() => downloadArtifact(selected.name, r, artifact)}><Download size={12}/> {t('pipelines.artifactDownload')}</button>
+            </div>
+          })}
+        </div>
+
+        {/* Item 9: simulação de deploy canário / blue-green */}
+        <div className="panel__header"><div><span className="eyebrow">{t('pipelines.canaryEyebrow')}</span><h2>{t('pipelines.canaryTitle')}</h2></div></div>
+        <div className="canary-panel">
+          {!canaryActive
+            ? <button className="button button--tiny button--primary" disabled={!canEdit} title={!canEdit ? t('pipelines.viewerBlocked') : undefined} onClick={startCanary}><Play size={13}/> {t('pipelines.canaryStart')}</button>
+            : <>
+              <div className="canary-progress-track"><div className="canary-progress-bar" style={{ width: `${canaryProgress}%` }}/></div>
+              <div className="canary-controls">
+                <span className="canary-status">{t('pipelines.canaryProgress')}: {canaryProgress}%</span>
+                <button className="button button--tiny" onClick={togglePauseCanary}>{canaryPaused ? <Play size={13}/> : <Pause size={13}/>} {canaryPaused ? t('pipelines.canaryResume') : t('pipelines.canaryPause')}</button>
+                <button className="button button--tiny" onClick={abortCanary}><Square size={13}/> {t('pipelines.canaryAbort')}</button>
+              </div>
+              {canaryProgress >= 100 && <span className="canary-status">{t('pipelines.canaryDone')}</span>}
+            </>}
         </div>
 
         {/* Itens 15 & 16: anotações e "quem quebrou o build" */}
@@ -444,6 +632,27 @@ export default function PipelinesPage() {
       <div style={{marginTop:14, display:'flex', justifyContent:'flex-end'}}>
         <button className="button button--primary" onClick={saveEditor}>{t('pipelines.saveStages')}</button>
       </div>
+    </Modal>}
+
+    {rollbackOpen && selected && <Modal title={t('pipelines.rollbackTitle')} onClose={()=>setRollbackOpen(false)}>
+      {successfulRuns.length === 0
+        ? <p style={{fontSize:11, color:'var(--muted)'}}>{t('pipelines.rollbackNone')}</p>
+        : <div className="rollback-panel">
+          <p style={{fontSize:11, color:'var(--muted)', margin:0}}>{t('pipelines.rollbackPick')}</p>
+          <div className="rollback-list">
+            {successfulRuns.map(r => <button key={r.id} type="button"
+              className={classNames('rollback-option', rollbackPick?.id === r.id && 'is-selected')}
+              onClick={()=>setRollbackPick(r)}>
+              <CheckCircle2 size={14}/>
+              <span className="grow">#{r.runNumber} · {r.date}</span>
+              <strong>{r.durationSeconds}s</strong>
+            </button>)}
+          </div>
+          <div style={{display:'flex', justifyContent:'flex-end', gap:8}}>
+            <button className="button button--tiny" onClick={()=>setRollbackOpen(false)}>{t('overview.widgetBuilderCancel')}</button>
+            <button className="button button--tiny button--primary" disabled={!rollbackPick} onClick={confirmRollback}>{t('pipelines.rollbackConfirm')}</button>
+          </div>
+        </div>}
     </Modal>}
   </>
 }
