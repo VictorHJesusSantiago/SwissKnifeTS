@@ -22,12 +22,15 @@ import {
   sprintTotalPoints,
   type PersonAllocation,
 } from '../data/capacityExtra'
+import { defaultHourlyRates, linearForecast, orgChart, SPRINT_HOURS, totalAllocationPct, type OrgNode } from '../data/capacityExtra3'
+import { useLocalStorage } from '../hooks/useLocalStorage'
 import { useI18n } from '../i18n/I18nContext'
 import type { TranslationKey } from '../i18n/translations'
-import { classNames } from '../utils/format'
+import { classNames, formatCurrency } from '../utils/format'
 import { exportIcs } from '../utils/ics'
 import '../styles/capacity-extra.css'
 import '../styles/capacityExtraFeatures.css'
+import '../styles/capacityExtra3.css'
 
 const teams = [
   { name: 'Platform Core', people: 8, allocated: 92, work: ['Migração EKS', 'Observabilidade'] },
@@ -73,23 +76,40 @@ function Burndown({ t }: { t: Tr }) {
 function HistoryChart({ t }: { t: Tr }) {
   const width = 560, height = 170, pad = 28
   const max = 100
-  const x = (i: number) => pad + (i / (sprintHistory.length - 1)) * (width - pad * 2)
-  const y = (v: number) => height - pad - (v / max) * (height - pad * 2)
+  const forecast = useMemo(() => linearForecast(sprintHistory, 2), [])
+  const allPoints = [...sprintHistory, ...forecast]
+  const n = allPoints.length
+  const x = (i: number) => pad + (i / (n - 1)) * (width - pad * 2)
+  const y = (v: number) => height - pad - (Math.min(v, max) / max) * (height - pad * 2)
   const pts = sprintHistory.map((d, i) => `${x(i)},${y(d.utilization)}`).join(' ')
-  const barWidth = (width - pad * 2) / sprintHistory.length - 14
+  const forecastPts = [sprintHistory[sprintHistory.length - 1], ...forecast].map((d, i) => `${x(sprintHistory.length - 1 + i)},${y(d.utilization)}`).join(' ')
+  const barWidth = (width - pad * 2) / n - 14
   return <div className="history-chart">
     <svg viewBox={`0 0 ${width} ${height}`} width="100%" height={height}>
       <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="var(--border)" />
       <line x1={pad} y1={y(100)} x2={width - pad} y2={y(100)} stroke="#ff7082" strokeDasharray="3 3" opacity={0.5} />
       {sprintHistory.map((d, i) => <rect key={d.sprint} x={x(i) - barWidth / 2} y={y(d.utilization)} width={barWidth} height={height - pad - y(d.utilization)} fill={d.utilization > 90 ? '#ff7082' : '#8097ff'} opacity={0.55} rx={3} />)}
+      {forecast.map((d, i) => <rect key={d.sprint} x={x(sprintHistory.length + i) - barWidth / 2} y={y(d.utilization)} width={barWidth} height={height - pad - y(d.utilization)} fill="#8693a5" opacity={0.35} rx={3} strokeDasharray="3 3" stroke="#8693a5" />)}
       <polyline points={pts} fill="none" stroke="#6fd7a3" strokeWidth={2.5} />
+      <polyline points={forecastPts} fill="none" stroke="#8693a5" strokeWidth={2.5} strokeDasharray="5 4" />
       {sprintHistory.map((d, i) => <circle key={d.sprint} cx={x(i)} cy={y(d.utilization)} r={3.5} fill="#6fd7a3" />)}
-      {sprintHistory.map((d, i) => <text key={d.sprint} x={x(i)} y={height - pad + 14} fontSize={9} fill="var(--muted)" textAnchor="middle">{d.sprint.replace('Sprint ', 'S')}</text>)}
+      {forecast.map((d, i) => <circle key={d.sprint} cx={x(sprintHistory.length + i)} cy={y(d.utilization)} r={3.5} fill="#8693a5" />)}
+      {allPoints.map((d, i) => <text key={d.sprint} x={x(i)} y={height - pad + 14} fontSize={9} fill="var(--muted)" textAnchor="middle">{d.sprint.replace('Sprint ', 'S')}</text>)}
     </svg>
-    <div className="history-chart__legend">
+    <div className="history-chart__legend forecast-chart__legend">
       <span><i style={{ background: '#6fd7a3' }} />{t('capacity.history.legend')}</span>
       <span><i style={{ background: '#ff7082' }} />{'>'}90%</span>
+      <span><i style={{ background: '#8693a5' }} />{t('capacity.forecast.legend')}</span>
     </div>
+  </div>
+}
+
+function OrgChartNode({ node }: { node: OrgNode }) {
+  return <div className="org-chart__branch">
+    <div className="org-chart__node"><strong>{node.name}</strong><small>{node.role}</small></div>
+    {node.children && node.children.length > 0 && <div className="org-chart__children">
+      {node.children.map(child => <OrgChartNode key={child.name} node={child} />)}
+    </div>}
   </div>
 }
 
@@ -184,6 +204,18 @@ export default function CapacityPage() {
   // Item 10 — simulação de férias coletivas
   const vacationStart = today
   const vacationEnd = addDays(today, 6)
+  // Item 1 — custo por pessoa (taxa/hora editável x alocação x horas do sprint)
+  const [hourlyRates, setHourlyRates] = useLocalStorage<Record<string, number>>('opsphere-capacity-rates', defaultHourlyRates)
+  const costRows = useMemo(() => activeAllocation.map(p => {
+    const allocPct = totalAllocationPct(p)
+    const rate = hourlyRates[p.person] ?? 120
+    const hours = (allocPct / 100) * SPRINT_HOURS
+    const cost = rate * hours
+    return { person: p.person, team: p.team, allocPct, rate, hours, cost }
+  }), [activeAllocation, hourlyRates])
+  const totalTeamCost = costRows.reduce((s, r) => s + r.cost, 0)
+  const setRate = (person: string, rate: number) => setHourlyRates(v => ({ ...v, [person]: Math.max(0, rate) }))
+
   const onSimulateVacation = () => {
     setVacationSimActive(true)
     logAction(t('capacity.vacation.audit'), `${isoDate(vacationStart)} → ${isoDate(vacationEnd)} · ${totalPeople} pessoas`)
@@ -270,6 +302,27 @@ export default function CapacityPage() {
           </div>
           <div className="insight"><Calendar size={16} /><span>{t('capacity.absence.availableCapacity')} <strong>{availableCapacityPct}%</strong> {t('capacity.absence.consideringAbsences')}</span></div>
           <div className="panel__actions" style={{ marginTop: 10 }}><ExportCsvButton filename="ausencias" rows={absences} label="Exportar CSV" /><button className="button button--tiny" onClick={onExportAbsencesIcs}><Calendar size={12} /> {t('capacity.export.icsButton')}</button></div>
+        </div>
+      </article>
+
+      <article className="panel panel--wide"><div className="panel__header"><div><span className="eyebrow">{t('capacity.cost.eyebrow')}</span><h2>{t('capacity.cost.title')}</h2></div></div>
+        <div className="cost-panel__table">
+          {costRows.map(r => <div className="cost-panel__row" key={r.person}>
+            <span><strong>{r.person}</strong> <small>· {r.team}</small></span>
+            <span>{t('capacity.cost.allocation')}: {r.allocPct}%</span>
+            <label>{t('capacity.cost.rate')} <input type="number" min={0} disabled={!canEdit} value={r.rate} onChange={e => setRate(r.person, Number(e.target.value))} /></label>
+            <strong>{formatCurrency(r.cost)}</strong>
+          </div>)}
+        </div>
+        <div className="cost-panel__total"><span>{t('capacity.cost.total')}</span><strong>{formatCurrency(totalTeamCost)}</strong></div>
+      </article>
+
+      <article className="panel"><div className="panel__header"><div><span className="eyebrow">{t('capacity.org.eyebrow')}</span><h2>{t('capacity.org.title')}</h2></div></div>
+        <div className="org-chart">
+          <div className="org-chart__leader"><strong>{orgChart.name}</strong><small>{orgChart.role}</small></div>
+          <div className="org-chart__branches">
+            {orgChart.children?.map(child => <OrgChartNode key={child.name} node={child} />)}
+          </div>
         </div>
       </article>
 
