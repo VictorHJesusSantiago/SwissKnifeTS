@@ -1,15 +1,18 @@
-import { Bookmark, LayoutGrid, Link2, List, Paperclip, Plus, Redo2, Search, Send, Star, Undo2, X } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Bookmark, LayoutGrid, Link2, List, Paperclip, Plus, Redo2, Search, Send, Star, ThumbsUp, Undo2, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { BarChart } from '../components/charts/BarChart'
 import { Badge } from '../components/ui/Badge'
 import { Modal } from '../components/ui/Modal'
 import { PageHeader } from '../components/ui/PageHeader'
 import { PrintButton } from '../components/ui/PrintButton'
 import { useAudit } from '../context/AuditContext'
 import { useFavorites } from '../context/FavoritesContext'
+import { useGlobalUndo } from '../context/GlobalUndoContext'
 import { useNotifications } from '../context/NotificationContext'
 import { useRole } from '../context/RoleContext'
 import { assigneeOptions, findDuplicateCandidates, parseAgeToHours, slaHoursByPriority, ticketTemplates } from '../data/ticketsExtra'
 import type { AttachmentMeta, ChecklistItem, SavedView, TicketComment } from '../data/ticketsExtra'
+import { ageBucketFor, ageBuckets, buildPostmortemMarkdown, type PostmortemDraft } from '../data/ticketsExtra3'
 import { initialTickets } from '../data/mockData'
 import { useLocalStorage } from '../hooks/useLocalStorage'
 import { useUndoable } from '../hooks/useUndoable'
@@ -17,6 +20,7 @@ import { useI18n } from '../i18n/I18nContext'
 import type { Ticket } from '../types'
 import '../styles/tickets-extra.css'
 import '../styles/tickets-extra2.css'
+import '../styles/tickets-extra3.css'
 
 function loadStoredTickets(): Ticket[] {
   try {
@@ -31,6 +35,12 @@ const STALE_THRESHOLD_HOURS = 48
 
 function initials(name: string) {
   return name.split(' ').map(s => s[0]).join('').slice(0, 2).toUpperCase()
+}
+
+function isSlaBreached(ticket: Ticket): boolean {
+  const totalHours = slaHoursByPriority[ticket.priority]
+  const elapsed = parseAgeToHours(ticket.age)
+  return elapsed >= totalHours
 }
 
 function SlaBar({ ticket }: { ticket: Ticket }) {
@@ -88,6 +98,20 @@ export default function TicketsPage() {
   // --- 19. Reações em comentários ---
   const [reactions, setReactions] = useLocalStorage<Record<string, Record<string, number>>>('opsphere-ticket-comment-reactions', {})
 
+  // --- Votos de priorização ("concordo com a prioridade") ---
+  const [votes, setVotes] = useLocalStorage<Record<string, number>>('opsphere-ticket-votes', {})
+  const [votedByMe, setVotedByMe] = useLocalStorage<Record<string, boolean>>('opsphere-ticket-voted-by-me', {})
+  const [sortByVotes, setSortByVotes] = useState(false)
+
+  // --- Pós-mortem automático ---
+  const [postmortems, setPostmortems] = useLocalStorage<Record<string, PostmortemDraft>>('opsphere-ticket-postmortems', {})
+  const [showPostmortem, setShowPostmortem] = useState(false)
+
+  // --- Histograma de idade por coluna ---
+  const [showAgeHistogram, setShowAgeHistogram] = useState(false)
+
+  const { registerUndo } = useGlobalUndo()
+
   // --- 16. Modo lista ---
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban')
   const [sortColumn, setSortColumn] = useState<'id' | 'priority' | 'status' | 'assignee' | 'age'>('id')
@@ -102,6 +126,7 @@ export default function TicketsPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
   const [form, setForm] = useState({ title: '', priority: 'P2' as Ticket['priority'], assignee: '', tags: [] as string[] })
   const [duplicateCandidates, setDuplicateCandidates] = useState<{ ticket: { id: string; title: string }; score: number }[]>([])
+  const [recurringMatch, setRecurringMatch] = useState<{ id: string; title: string } | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const allTags = useMemo(() => Array.from(new Set(tickets.flatMap(t => t.tags))), [tickets])
@@ -143,6 +168,8 @@ export default function TicketsPage() {
   const handleTitleChange = (value: string) => {
     setForm({ ...form, title: value })
     setDuplicateCandidates(value.trim().length > 3 ? findDuplicateCandidates(value, tickets) : [])
+    const closedMatches = value.trim().length > 3 ? findDuplicateCandidates(value, tickets.filter(tk => tk.status === 'Concluído')) : []
+    setRecurringMatch(closedMatches[0]?.ticket || null)
   }
 
   const create = () => {
@@ -156,10 +183,19 @@ export default function TicketsPage() {
     setTickets(list => [{ id, title: form.title, priority: form.priority, status: 'Backlog', assignee, tags: form.tags.length ? form.tags : ['novo'], age: 'agora' }, ...list])
     logAction('Ticket criado', `${id} · ${form.title}`)
     addNotification('Ticket criado', `${id} foi adicionado ao backlog e atribuído a ${assignee}.`, 'info')
+
+    // --- Detecção de tickets recorrentes: ticket "Concluído" com título muito similar ---
+    const closedMatches = findDuplicateCandidates(form.title, tickets.filter(tk => tk.status === 'Concluído'))
+    if (closedMatches.length > 0) {
+      const match = closedMatches[0]
+      addNotification('Problema recorrente detectado', `Este problema já ocorreu antes, ticket ${match.ticket.id}.`, 'warning')
+    }
+
     setModal(false)
     setSelectedTemplate(null)
     setForm({ title: '', priority: 'P2', assignee: '', tags: [] })
     setDuplicateCandidates([])
+    setRecurringMatch(null)
   }
 
   const move = (ticket: Ticket, direction: number) => {
@@ -231,6 +267,45 @@ export default function TicketsPage() {
   // --- 18. Ticket "esquecido" ---
   const isStale = (ticket: Ticket) => parseAgeToHours(ticket.age) > STALE_THRESHOLD_HOURS && (comments[ticket.id] || []).length === 0
 
+  // --- Votos de priorização ---
+  const toggleVote = (ticket: Ticket, event: MouseEvent) => {
+    event.stopPropagation()
+    const alreadyVoted = !!votedByMe[ticket.id]
+    setVotes(map => ({ ...map, [ticket.id]: Math.max(0, (map[ticket.id] || 0) + (alreadyVoted ? -1 : 1)) }))
+    setVotedByMe(map => ({ ...map, [ticket.id]: !alreadyVoted }))
+    registerUndo(`Voto em ${ticket.id} desfeito`, () => {
+      setVotes(map => ({ ...map, [ticket.id]: Math.max(0, (map[ticket.id] || 0) + (alreadyVoted ? 1 : -1)) }))
+      setVotedByMe(map => ({ ...map, [ticket.id]: alreadyVoted }))
+    })
+  }
+
+  // --- Pós-mortem automático ---
+  const currentPostmortem: PostmortemDraft = (detailId && postmortems[detailId]) || { causaRaiz: '', acaoCorretiva: '' }
+  const updatePostmortem = (patch: Partial<PostmortemDraft>) => {
+    if (!detailId) return
+    setPostmortems(map => ({ ...map, [detailId]: { ...currentPostmortem, ...patch } }))
+  }
+  const downloadPostmortem = () => {
+    if (!detailTicket) return
+    const totalHours = slaHoursByPriority[detailTicket.priority]
+    const elapsed = parseAgeToHours(detailTicket.age)
+    const markdown = buildPostmortemMarkdown(detailTicket, totalHours, elapsed, currentPostmortem)
+    const blob = new Blob([markdown], { type: 'text/markdown' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = `postmortem-${detailTicket.id}.md`
+    a.click()
+    URL.revokeObjectURL(a.href)
+    logAction('Pós-mortem gerado', `${detailTicket.id} · pós-mortem baixado`)
+  }
+
+  // --- Histograma de idade por coluna ---
+  const ageHistogramByColumn = useMemo(() => columns.map(column => {
+    const counts: Record<string, number> = { '0-4h': 0, '4-12h': 0, '12-24h': 0, '24h+': 0 }
+    for (const ticket of tickets.filter(tk => tk.status === column)) counts[ageBucketFor(parseAgeToHours(ticket.age))]++
+    return { column, data: ageBuckets.map(bucket => ({ label: bucket, value: counts[bucket] })) }
+  }), [tickets])
+
   // --- 15. Checklist helpers ---
   const addChecklistItem = () => {
     if (!detailId || !checklistDraft.trim()) return
@@ -274,6 +349,8 @@ export default function TicketsPage() {
         <button className="button button--compact" onClick={saveCurrentView}><Bookmark size={13} /> {t('tickets.saveView')}</button>
         <button className="button button--compact" disabled={!canUndo} title={t('tickets.undo')} onClick={() => undoTickets()}><Undo2 size={13} /></button>
         <button className="button button--compact" disabled={!canRedo} title={t('tickets.redo')} onClick={() => redoTickets()}><Redo2 size={13} /></button>
+        <button className={`button button--compact ${sortByVotes ? 'button--live' : ''}`} onClick={() => setSortByVotes(v => !v)}><ThumbsUp size={13} /> {t('tickets.sortByVotes')}</button>
+        <button className={`button button--compact ${showAgeHistogram ? 'button--live' : ''}`} onClick={() => setShowAgeHistogram(v => !v)}>{t('tickets.ageHistogram')}</button>
         <div className="view-toggle">
           <button className={viewMode === 'kanban' ? 'is-active' : ''} onClick={() => setViewMode('kanban')}><LayoutGrid size={13} /> {t('tickets.viewKanban')}</button>
           <button className={viewMode === 'list' ? 'is-active' : ''} onClick={() => setViewMode('list')}><List size={13} /> {t('tickets.viewList')}</button>
@@ -281,6 +358,13 @@ export default function TicketsPage() {
       </div>
       <span>{tickets.filter(tk => tk.status !== 'Concluído').length} {t('tickets.openCount')}</span>
     </div>
+
+    {showAgeHistogram && <div className="age-histogram-panel">
+      {ageHistogramByColumn.map(row => <div className="age-histogram-panel__column" key={row.column}>
+        <h4>{row.column}</h4>
+        <BarChart data={row.data} />
+      </div>)}
+    </div>}
 
     {savedViews.length > 0 && <section className="saved-views" style={{ marginBottom: 12 }}>
       {savedViews.map(view => <span className="saved-view-chip" key={view.id} onClick={() => applyView(view)}>
@@ -291,13 +375,17 @@ export default function TicketsPage() {
 
     {viewMode === 'kanban' && <section className="kanban">{columns.map((column, columnIndex) => <div className="kanban-column" key={column}><header><h2>{column}</h2><span>{visible.filter(t => t.status === column).length}</span></header>
       {column !== 'Concluído' && <div className="column-points">{columnPoints(column)} {t('tickets.pointsRemaining')}</div>}
-      <div className="kanban-column__body">{visible.filter(t => t.status === column).map(ticket => <article className="ticket-card" key={ticket.id} onClick={() => setDetailId(ticket.id)}>
+      <div className="kanban-column__body">{visible.filter(t => t.status === column).sort((a, b) => sortByVotes ? (votes[b.id] || 0) - (votes[a.id] || 0) : 0).map(ticket => <article className="ticket-card" key={ticket.id} onClick={() => setDetailId(ticket.id)}>
         <div><Badge tone={ticket.priority}>{ticket.priority}</Badge><span>{ticket.id}</span>{isStale(ticket) && <span className="stale-badge">{t('tickets.staleBadge')}</span>}{!!storyPoints[ticket.id] && <span className="points-badge">{storyPoints[ticket.id]} pts</span>}<button className="icon-button" title={t('pipelines.favorite')} onClick={event => { event.stopPropagation(); toggleFavorite({ id: ticket.id, module: 'tickets', label: ticket.title }) }}><Star fill={isFavorite('tickets', ticket.id) ? 'currentColor' : 'none'} size={14} /></button></div>
         <h3>{ticket.title}</h3>
         <div className="tag-list">{ticket.tags.map(tag => <span key={tag}>{tag}</span>)}</div>
         <SlaBar ticket={ticket} />
         <footer><div className="mini-avatar">{initials(ticket.assignee)}</div><span>{ticket.assignee}</span><time>{ticket.age}</time></footer>
-        <div className="ticket-actions"><button disabled={columnIndex === 0} onClick={event => { event.stopPropagation(); move(ticket, -1) }}>←</button><button disabled={columnIndex === 3} onClick={event => { event.stopPropagation(); move(ticket, 1) }}>{t('tickets.advance')}</button></div>
+        <div className="ticket-actions">
+          <button disabled={columnIndex === 0} onClick={event => { event.stopPropagation(); move(ticket, -1) }}>←</button>
+          <button className={`vote-button ${votedByMe[ticket.id] ? 'is-voted' : ''}`} title={t('tickets.upvotePriority')} onClick={event => toggleVote(ticket, event)}><ThumbsUp size={12} /> {votes[ticket.id] || 0}</button>
+          <button disabled={columnIndex === 3} onClick={event => { event.stopPropagation(); move(ticket, 1) }}>{t('tickets.advance')}</button>
+        </div>
       </article>)}</div>
     </div>)}</section>}
 
@@ -323,6 +411,10 @@ export default function TicketsPage() {
       {duplicateCandidates.length > 0 && <div className="duplicate-warning">
         <strong>{t('tickets.duplicateWarning')}</strong>
         {duplicateCandidates.slice(0, 3).map(candidate => <span key={candidate.ticket.id}>{candidate.ticket.id} · {candidate.ticket.title} ({Math.round(candidate.score * 100)}%)</span>)}
+      </div>}
+      {recurringMatch && <div className="recurring-warning">
+        <strong>{t('tickets.recurringWarning')}</strong>
+        <span>{recurringMatch.id} · {recurringMatch.title}</span>
       </div>}
       <div className="form-grid">
         <label className="span-2">{t('tickets.formTitle')}<input autoFocus value={form.title} onChange={e => handleTitleChange(e.target.value)} placeholder={t('tickets.formTitlePlaceholder')} /></label>
@@ -351,6 +443,20 @@ export default function TicketsPage() {
             <input type="number" min={0} value={storyPoints[detailTicket.id] || 0} disabled={!canEdit} onChange={e => setStoryPoints(map => ({ ...map, [detailTicket.id]: Number(e.target.value) || 0 }))} />
           </div>
           <SlaBar ticket={detailTicket} />
+
+          {isSlaBreached(detailTicket) && <>
+            <button className="button button--compact" onClick={() => setShowPostmortem(v => !v)}>{t('tickets.generatePostmortem')}</button>
+            {showPostmortem && <div className="postmortem-panel">
+              <strong>{t('tickets.postmortemTitle')}</strong>
+              <label>{t('tickets.rootCause')}
+                <textarea value={currentPostmortem.causaRaiz} disabled={!canEdit} onChange={e => updatePostmortem({ causaRaiz: e.target.value })} placeholder={t('tickets.rootCausePlaceholder')} />
+              </label>
+              <label>{t('tickets.correctiveAction')}
+                <textarea value={currentPostmortem.acaoCorretiva} disabled={!canEdit} onChange={e => updatePostmortem({ acaoCorretiva: e.target.value })} placeholder={t('tickets.correctiveActionPlaceholder')} />
+              </label>
+              <button className="button button--primary" onClick={downloadPostmortem}>{t('tickets.downloadPostmortem')}</button>
+            </div>}
+          </>}
 
           <h3>{t('tickets.blockedBy')}</h3>
           <div className="dependency-row">

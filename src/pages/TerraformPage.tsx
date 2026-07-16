@@ -1,5 +1,5 @@
-import { AlertOctagon, ChevronDown, ChevronRight, Cloud, Copy, Download, FileJson, FlaskConical, GitCompare, Layers, Network, History, RotateCcw, Search, Skull, Star, StickyNote, Tags, Wallet } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { AlertOctagon, ChevronDown, ChevronRight, Cloud, Copy, Download, FileJson, FlaskConical, GitCompare, Layers, Lock, Network, History, Package, PiggyBank, RotateCcw, Search, Skull, Star, StickyNote, Tags, Wallet } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { PageHeader } from '../components/ui/PageHeader'
 import { Modal } from '../components/ui/Modal'
 import { BarChart } from '../components/charts/BarChart'
@@ -11,9 +11,11 @@ import { useRole } from '../context/RoleContext'
 import { useLocalStorage } from '../hooks/useLocalStorage'
 import { dependencyEdges, dependencyNodes, initialApplies, monthlyCostByType, plans as extraPlans, type ApplyEvent } from '../data/terraformExtra'
 import { costHistory } from '../data/terraformExtra2'
+import { isProviderOutdated, providerVersions, rightsizingSuggestions } from '../data/terraformExtra3'
 import { useI18n } from '../i18n/I18nContext'
 import '../styles/terraform-extra.css'
 import '../styles/terraform-extra2.css'
+import '../styles/terraform-extra3.css'
 
 type Resource={id:string;type:string;provider:string;children?:Resource[];attrs?:Record<string,string>}
 const tree:Resource[]=[
@@ -75,7 +77,7 @@ function buildLayers(nodes: string[], edges: { from: string; to: string }[]): st
  return layers
 }
 
-type ExtraTab = 'diff' | 'graph' | 'history' | 'cost'
+type ExtraTab = 'diff' | 'graph' | 'history' | 'cost' | 'providers' | 'rightsizing'
 
 export default function TerraformPage(){
  const [open,setOpen]=useState<string[]>(tree.map(t=>t.id)),[selected,setSelected]=useState<Resource>(tree[1].children![0]),[query,setQuery]=useState('')
@@ -201,6 +203,26 @@ export default function TerraformPage(){
  const costRows = flatResources.map(r => ({ ...r, cost: monthlyCostByType[r.type] ?? 0 }))
  const totalCost = costRows.reduce((sum, r) => sum + r.cost, 0)
 
+ // --- Simulação de state lock: outro usuário mock ("Ana Lima") supostamente aplicando mudanças ---
+ const [lockModalOpen, setLockModalOpen] = useState(false)
+ const [applyLocked, setApplyLocked] = useState(false)
+ const lockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+ useEffect(() => () => { if (lockTimerRef.current) clearTimeout(lockTimerRef.current) }, [])
+ const waitForLock = () => {
+  setLockModalOpen(false)
+  setApplyLocked(true)
+  addNotification(t('terraform.lock.forceNotifyTitle'), t('terraform.lock.waiting'), 'warning')
+  lockTimerRef.current = setTimeout(() => {
+   setApplyLocked(false)
+   addNotification(t('terraform.lock.title'), t('terraform.lock.waitDone'), 'healthy')
+  }, 6000)
+ }
+ const forceApply = () => {
+  setLockModalOpen(false)
+  logAction(t('terraform.lock.simulateButton'), t('terraform.lock.forceLogged'))
+  addNotification(t('terraform.lock.forceNotifyTitle'), t('terraform.lock.forceLogged'), 'critical')
+ }
+
  // --- Simulação de destroy total ---
  const confirmDestroyStep2 = () => {
   if (destroyConfirmText.trim().toUpperCase() !== 'DESTROY') return
@@ -245,6 +267,8 @@ export default function TerraformPage(){
   <button className={tab==='graph'?'is-active':''} onClick={()=>setTab('graph')}><Network size={14}/> {t('terraform.tab.graph')}</button>
   <button className={tab==='history'?'is-active':''} onClick={()=>setTab('history')}><History size={14}/> {t('terraform.tab.history')}</button>
   <button className={tab==='cost'?'is-active':''} onClick={()=>setTab('cost')}><Wallet size={14}/> {t('terraform.tab.cost')}</button>
+  <button className={tab==='providers'?'is-active':''} onClick={()=>setTab('providers')}><Package size={14}/> {t('terraform.tab.providers')}</button>
+  <button className={tab==='rightsizing'?'is-active':''} onClick={()=>setTab('rightsizing')}><PiggyBank size={14}/> {t('terraform.tab.rightsizing')}</button>
  </div>
  {tab==='state'&&
  <section className="terraform-layout"><aside className="panel resource-tree"><label className="search-input"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder={t('terraform.filterPlaceholder')}/></label>
@@ -282,7 +306,12 @@ export default function TerraformPage(){
   <div className="plan-summary"><span className="badge badge--healthy">{planSummary.create} {t('terraform.plan.toCreate')}</span><span className="badge badge--warning">{planSummary.update} {t('terraform.plan.toChange')}</span><span className="badge badge--critical">{planSummary.destroy} {t('terraform.plan.toDestroy')}</span></div>
   {favoritedDestroyWarnings.length > 0 && <div className="tf-fav-warning"><AlertOctagon size={14}/> {t('terraform.favorite.destroyWarning')} {favoritedDestroyWarnings.map(w=>w.address).join(', ')}</div>}
   <div className="plan-list">{plan.map(change=><div className={`plan-row plan-row--${change.action}`} key={change.address}><b className={`plan-marker badge--${planTone[change.action]}`}>{planIcon[change.action]}</b><div><strong>{change.address}</strong>{change.action==='destroy' && isFavorite('terraform',change.address) && <Star size={12} fill="currentColor" style={{color:'var(--danger)',marginLeft:6}}/>}<span>{change.detail}</span></div></div>)}</div>
-  <div className="plan-actions"><button className="button" onClick={()=>download('terraform-plan.json',JSON.stringify(plan,null,2))}><Download size={16}/> {t('terraform.exportPlan')}</button><button className="button button--primary" disabled={!canEdit} title={!canEdit ? 'Ação bloqueada no modo visualizador' : undefined}>{t('terraform.applyPlan')}</button></div>
+  {applyLocked && <div className="tf-lock-waiting"><Lock size={12}/> {t('terraform.lock.waiting')}</div>}
+  <div className="plan-actions">
+   <button className="button" onClick={()=>download('terraform-plan.json',JSON.stringify(plan,null,2))}><Download size={16}/> {t('terraform.exportPlan')}</button>
+   <button className="button" disabled={!canEdit} title={!canEdit ? 'Ação bloqueada no modo visualizador' : undefined} onClick={()=>setLockModalOpen(true)}><Lock size={16}/> {t('terraform.lock.simulateButton')}</button>
+   <button className="button button--primary" disabled={!canEdit || applyLocked} title={!canEdit ? 'Ação bloqueada no modo visualizador' : applyLocked ? t('terraform.lock.waiting') : undefined}>{t('terraform.applyPlan')}</button>
+  </div>
  </section>}
 
  {tab === 'diff' && <section className="panel table-panel">
@@ -391,6 +420,37 @@ export default function TerraformPage(){
    </div>
  </section>}
 
+ {tab === 'providers' && <section className="panel table-panel">
+   <div className="tf-provider-table data-table">
+     <div className="data-table__head" style={{gridTemplateColumns:'1.2fr 1fr 1fr 1fr'}}><span>{t('terraform.providers.name')}</span><span>{t('terraform.providers.constraint')}</span><span>{t('terraform.providers.current')}</span><span>{t('terraform.providers.latest')}</span></div>
+     {providerVersions.map(p => {
+       const outdated = isProviderOutdated(p.current, p.latest)
+       return <div className="data-table__row" key={p.name} style={{gridTemplateColumns:'1.2fr 1fr 1fr 1fr'}}>
+         <span>{p.name}</span>
+         <span><code>{p.constraint}</code></span>
+         <span>{p.current}</span>
+         <span>
+           <span className={outdated ? 'tf-provider-outdated' : 'tf-provider-uptodate'}>{p.latest}{outdated ? ` · ${t('terraform.providers.outdated')}` : ` · ${t('terraform.providers.upToDate')}`}</span>
+           {outdated && <span className="tf-provider-upgrade-hint">{t('terraform.providers.upgradeHint')} {p.name} {p.constraint.replace(/[~><=\s]/g, '').split('.')[0]}.x = "{p.latest}"</span>}
+         </span>
+       </div>
+     })}
+   </div>
+ </section>}
+
+ {tab === 'rightsizing' && <section className="panel">
+   <div style={{padding:'16px'}}>
+     <h3 style={{margin:'0 0 4px',fontSize:'11px'}}>{t('terraform.rightsizing.title')}</h3>
+     <div className="tf-rightsizing-list">
+       {rightsizingSuggestions.map(s => <div className="tf-rightsizing-item" key={s.resourceId}>
+         <strong>{s.resourceId}</strong>
+         <p>{s.message}</p>
+         <span className="tf-rightsizing-savings">{t('terraform.rightsizing.savings')}: R$ {s.estimatedMonthlySavings.toLocaleString('pt-BR')}{t('terraform.rightsizing.perMonth')}</span>
+       </div>)}
+     </div>
+   </div>
+ </section>}
+
  {destroyStep === 1 && <Modal title={t('terraform.destroy.confirmTitle')} onClose={()=>setDestroyStep(0)}>
   <div className="tf-destroy-confirm">
    <p>{t('terraform.destroy.confirmStep1')}</p>
@@ -402,6 +462,15 @@ export default function TerraformPage(){
    <p>{t('terraform.destroy.confirmStep2')}</p>
    <input value={destroyConfirmText} onChange={e=>setDestroyConfirmText(e.target.value)} placeholder={t('terraform.destroy.confirmInputPlaceholder')}/>
    <div className="modal-actions"><button className="button" onClick={()=>{setDestroyStep(0);setDestroyConfirmText('')}}>{t('terraform.destroy.cancel')}</button><button className="button button--primary" disabled={destroyConfirmText.trim().toUpperCase()!=='DESTROY'} onClick={confirmDestroyStep2}>{t('terraform.destroy.confirmButton')}</button></div>
+  </div>
+ </Modal>}
+ {lockModalOpen && <Modal title={t('terraform.lock.title')} onClose={()=>setLockModalOpen(false)}>
+  <div className="tf-lock-modal">
+   <p><Lock size={13}/> {t('terraform.lock.message')}</p>
+   <div className="modal-actions">
+    <button className="button" onClick={waitForLock}>{t('terraform.lock.wait')}</button>
+    <button className="button button--primary" onClick={forceApply}>{t('terraform.lock.force')}</button>
+   </div>
   </div>
  </Modal>}
  </>
