@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeftRight, Bookmark, Boxes, CheckSquare, Download, FileText, Laptop, Plus, Printer, Search, Smartphone, Square, Star, Wifi } from 'lucide-react'
+import { AlertTriangle, ArrowLeftRight, Bookmark, Boxes, CheckSquare, ClipboardList, Download, FileText, Laptop, Plus, Printer, Search, Smartphone, Square, Star, TrendingDown, Wifi, X } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { BarChart } from '../components/charts/BarChart'
 import { Badge } from '../components/ui/Badge'
@@ -15,6 +15,7 @@ import {
   DEPRECIATION_RATE_PER_YEAR, estimateMaintenanceCost, extraAssets, fmtDate, type OwnershipProcess,
   parseWarranty, STOCK_ALERT_DAYS_THRESHOLD, TODAY, WARRANTY_ASSUMED_YEARS,
 } from '../data/assetsExtra'
+import { ASSET_REQUEST_TYPES, type AssetRequest, initialAssetRequests, projectDepreciation } from '../data/assetsExtra3'
 import { assets as initial } from '../data/mockData'
 import { useLocalStorage } from '../hooks/useLocalStorage'
 import { useI18n } from '../i18n/I18nContext'
@@ -23,6 +24,7 @@ import type { Asset } from '../types'
 import { classNames, formatCurrency } from '../utils/format'
 import '../styles/assets-extra.css'
 import '../styles/assets-extra2.css'
+import '../styles/assetsExtra3.css'
 
 interface LifecycleStage { label: string; date: Date; status: 'done' | 'current' | 'planned' }
 
@@ -138,6 +140,14 @@ export default function AssetsPage() {
   // --- Item 28: gráfico de distribuição ---
   const [distributionMode, setDistributionMode] = useState<'type' | 'location'>('type')
 
+  // --- Item 6: solicitação/aprovação de novo ativo ---
+  const [assetRequests, setAssetRequests] = useLocalStorage<AssetRequest[]>('opsphere-assets-requests', initialAssetRequests)
+  const [requestModal, setRequestModal] = useState(false)
+  const [requestForm, setRequestForm] = useState({ name: '', type: ASSET_REQUEST_TYPES[0] as string, justification: '' })
+
+  // --- Item 7: projeção de depreciação ---
+  const [depreciationAssetId, setDepreciationAssetId] = useState<string>('')
+
   const owners = useMemo(() => Array.from(new Set(assets.map(a => a.owner))).sort(), [assets])
   const locations = useMemo(() => Array.from(new Set(assets.map(a => a.location))).sort(), [assets])
 
@@ -181,6 +191,35 @@ export default function AssetsPage() {
     setModal(false)
   }
   const icon = (type: string) => type === 'Notebook' ? <Laptop /> : type === 'Mobile' ? <Smartphone /> : type === 'Rede' ? <Wifi /> : <Boxes />
+
+  // --- Item 6: solicitação/aprovação de novo ativo ---
+  const submitAssetRequest = () => {
+    if (!requestForm.name.trim() || !requestForm.justification.trim()) return
+    const request: AssetRequest = {
+      id: `req${Date.now()}`, name: requestForm.name.trim(), type: requestForm.type,
+      justification: requestForm.justification.trim(), requestedBy: 'Victor Lima', status: 'pendente',
+      createdAt: new Date().toISOString(),
+    }
+    setAssetRequests(list => [request, ...list])
+    logAction(t('assets.audit.requested'), `${request.name} (${request.type}) — ${t('assets.request.requestedBy')} ${request.requestedBy}`)
+    setRequestForm({ name: '', type: ASSET_REQUEST_TYPES[0], justification: '' })
+    setRequestModal(false)
+  }
+
+  const approveAssetRequest = (request: AssetRequest) => {
+    setAssetRequests(list => list.map(r => r.id === request.id ? { ...r, status: 'aprovado' } : r))
+    setAssets(list => [{ id: `AT-${1030 + list.length}`, name: request.name, type: request.type, owner: request.requestedBy, status: 'Ativo', location: 'São Paulo', value: 0, warranty: '—' }, ...list])
+    logAction(t('assets.audit.approved'), `${request.name} — ${t('assets.request.requestedBy')} ${request.requestedBy}`)
+    addNotification(t('assets.notify.approvedTitle'), `${request.name} ${t('assets.notify.approvedBody')}`, 'healthy')
+  }
+
+  const denyAssetRequest = (request: AssetRequest) => {
+    setAssetRequests(list => list.map(r => r.id === request.id ? { ...r, status: 'negado' } : r))
+    logAction(t('assets.audit.denied'), `${request.name} — ${t('assets.request.requestedBy')} ${request.requestedBy}`)
+    addNotification(t('assets.notify.deniedTitle'), `${request.name} ${t('assets.notify.deniedBody')}`, 'warning')
+  }
+
+  const pendingAssetRequests = assetRequests.filter(r => r.status === 'pendente')
 
   const exportDepreciationReport = () => {
     const rows = assets.map(a => {
@@ -276,6 +315,11 @@ export default function AssetsPage() {
     'Valor de compra': r.asset.value, 'Manutencao estimada': r.maintenance, 'TCO total': r.total,
   })), [tcoRows])
 
+  // --- Item 7: projeção de depreciação (5 anos) para o ativo selecionado ---
+  const depreciationAsset = useMemo(() => assets.find(a => a.id === depreciationAssetId) ?? assets[0], [assets, depreciationAssetId])
+  const depreciationProjection = useMemo(() => depreciationAsset ? projectDepreciation(depreciationAsset.value, DEPRECIATION_RATE_PER_YEAR, 5) : [], [depreciationAsset])
+  const depreciationMax = Math.max(1, ...depreciationProjection.map(p => p.value))
+
   return <>
     <PageHeader eyebrow={t('assets.eyebrow')} title={t('assets.title')} description={t('assets.description')} actions={<div style={{ display: 'flex', gap: 8 }}><button className="button" onClick={exportDepreciationReport}><Download size={16} /> {t('assets.exportDepreciation')}</button><button className="button button--primary" disabled={!canEdit} title={!canEdit ? 'Ação bloqueada no modo visualizador' : undefined} onClick={() => setModal(true)}><Plus size={16} /> {t('assets.registerAsset')}</button></div>} />
 
@@ -334,6 +378,45 @@ export default function AssetsPage() {
           <span>{r.asset.name}</span><span>{formatCurrency(r.asset.value)}</span><span>{formatCurrency(r.maintenance)}</span><strong>{formatCurrency(r.total)}</strong>
         </div>)}
       </div>
+    </section>
+
+    {/* Item 6: fluxo de solicitação/aprovação de novo ativo */}
+    <section className="panel request-panel">
+      <div className="panel__header" style={{ padding: 0, border: 'none' }}>
+        <div><span className="eyebrow">{t('assets.request.eyebrow')}</span><h2><ClipboardList size={16} /> {t('assets.request.pendingTitle')}</h2></div>
+        <button className="button button--small" disabled={!canEdit} title={!canEdit ? 'Ação bloqueada no modo visualizador' : undefined} onClick={() => setRequestModal(true)}><Plus size={14} /> {t('assets.request.action')}</button>
+      </div>
+      {pendingAssetRequests.length === 0 ? <p>{t('assets.request.empty')}</p> : <div className="request-panel__list">
+        {pendingAssetRequests.map(r => <div className="request-panel__item" key={r.id}>
+          <span><strong>{r.name}</strong><small>{r.type} · {t('assets.request.requestedBy')} {r.requestedBy}</small><small className="request-panel__justification">"{r.justification}"</small></span>
+          <span style={{ display: 'flex', gap: 6 }}>
+            <button className="button button--small button--primary" disabled={!canEdit} onClick={() => approveAssetRequest(r)}><CheckSquare size={13} /> {t('assets.request.approve')}</button>
+            <button className="button button--small" disabled={!canEdit} onClick={() => denyAssetRequest(r)}><X size={13} /> {t('assets.request.deny')}</button>
+          </span>
+        </div>)}
+      </div>}
+      {assetRequests.filter(r => r.status !== 'pendente').length > 0 && <div className="request-panel__history">
+        {assetRequests.filter(r => r.status !== 'pendente').map(r => <div className="request-panel__history-item" key={r.id}>
+          <span>{r.name}</span><Badge tone={r.status === 'aprovado' ? 'Ativo' : 'Manutenção'}>{r.status === 'aprovado' ? t('assets.request.statusApproved') : t('assets.request.statusDenied')}</Badge>
+        </div>)}
+      </div>}
+    </section>
+
+    {/* Item 7: gráfico de projeção de depreciação */}
+    <section className="panel depreciation-chart-panel">
+      <div className="panel__header" style={{ padding: 0, border: 'none' }}>
+        <div><span className="eyebrow">{t('assets.depreciationChart.eyebrow')}</span><h2><TrendingDown size={16} /> {t('assets.depreciationChart.title')}</h2></div>
+        <select value={depreciationAsset?.id ?? ''} onChange={e => setDepreciationAssetId(e.target.value)}>
+          {assets.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+      </div>
+      {depreciationAsset && <div className="depreciation-chart">
+        {depreciationProjection.map(p => <div className="depreciation-chart__col" key={p.year}>
+          <div className="depreciation-chart__bar-wrap"><div className="depreciation-chart__bar" style={{ height: `${(p.value / depreciationMax) * 100}%` }} /></div>
+          <strong>{formatCurrency(p.value)}</strong>
+          <small>{p.year === 0 ? t('assets.depreciationChart.currentYear') : `${t('assets.depreciationChart.year')} ${p.year}`}</small>
+        </div>)}
+      </div>}
     </section>
 
     <section className="panel table-panel">
@@ -395,6 +478,15 @@ export default function AssetsPage() {
     </section>
 
     {modal && <Modal title={t('assets.modal.registerTitle')} onClose={() => setModal(false)}><div className="form-grid"><label className="span-2">{t('assets.form.name')}<input autoFocus value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder={t('assets.form.namePlaceholder')} /></label><label>{t('assets.form.type')}<select value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}><option>Notebook</option><option>Mobile</option><option>Rede</option><option>Segurança</option></select></label><label>{t('assets.form.owner')}<input value={form.owner} onChange={e => setForm({ ...form, owner: e.target.value })} /></label><label className="span-2">{t('assets.form.location')}<input value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} /></label><div className="form-actions span-2"><button className="button" onClick={() => setModal(false)}>{t('assets.cancel')}</button><button className="button button--primary" disabled={!canEdit} title={!canEdit ? 'Ação bloqueada no modo visualizador' : undefined} onClick={create}>{t('assets.register')}</button></div></div></Modal>}
+
+    {requestModal && <Modal title={t('assets.request.title')} onClose={() => setRequestModal(false)}>
+      <div className="form-grid">
+        <label className="span-2">{t('assets.request.name')}<input autoFocus value={requestForm.name} onChange={e => setRequestForm({ ...requestForm, name: e.target.value })} placeholder={t('assets.request.namePlaceholder')} /></label>
+        <label>{t('assets.request.type')}<select value={requestForm.type} onChange={e => setRequestForm({ ...requestForm, type: e.target.value })}>{ASSET_REQUEST_TYPES.map(ty => <option key={ty}>{ty}</option>)}</select></label>
+        <label className="span-2">{t('assets.request.justification')}<textarea value={requestForm.justification} onChange={e => setRequestForm({ ...requestForm, justification: e.target.value })} placeholder={t('assets.request.justificationPlaceholder')} rows={3} /></label>
+        <div className="form-actions span-2"><button className="button" onClick={() => setRequestModal(false)}>{t('assets.cancel')}</button><button className="button button--primary" onClick={submitAssetRequest}>{t('assets.request.submit')}</button></div>
+      </div>
+    </Modal>}
 
     {/* Item 23: etiquetas em lote — sheet estilo A4, fora do .modal-backdrop para não ser ocultado na impressão */}
     {labelSheetOpen && <div className="label-sheet-overlay" onMouseDown={() => setLabelSheetOpen(false)}>
