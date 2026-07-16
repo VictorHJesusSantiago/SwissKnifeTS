@@ -1,8 +1,10 @@
 import '../styles/overview-extra.css'
 import '../styles/overview-extra2.css'
+import '../styles/overview-extra3.css'
 import {
-  AlertTriangle, ArrowRight, CalendarClock, CheckCircle2, Clock3, DollarSign, GitBranch, Maximize2,
-  Minimize2, Rocket, Server, ShieldAlert, ShieldCheck, Sliders, Smile, TicketCheck, Trophy, Zap,
+  AlertTriangle, ArrowRight, BookOpen, CalendarClock, CheckCircle2, Clock3, DollarSign, GitBranch, History,
+  Maximize2, Minimize2, Plus, Rocket, Server, ShieldAlert, ShieldCheck, Sliders, Smile, TicketCheck, Trash2,
+  Trophy, Users, Zap,
 } from 'lucide-react'
 import type { DragEvent, ReactNode } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -11,16 +13,22 @@ import { DonutChart } from '../components/charts/DonutChart'
 import { Sparkline } from '../components/charts/Sparkline'
 import { Badge } from '../components/ui/Badge'
 import { MetricCard } from '../components/ui/MetricCard'
+import { Modal } from '../components/ui/Modal'
 import { PageHeader } from '../components/ui/PageHeader'
 import { PrintButton } from '../components/ui/PrintButton'
 import { navigation } from '../config/navigation'
 import { useAudit } from '../context/AuditContext'
+import { useGlobalUndo } from '../context/GlobalUndoContext'
 import { useRole } from '../context/RoleContext'
 import { pipelines, initialTickets, vulnerabilities } from '../data/mockData'
 import {
   computeCostByEnv, computeTopIncidentServices, computeWarrantyAlerts, daysSince,
   lastResolvedCriticalIncidentDate, upcomingEvents, type DailySnapshot,
 } from '../data/overviewExtra2'
+import {
+  buildCustomMetricCatalog, buildVisitSnapshot, computeTopContributors, diffVisitSnapshots,
+  type CustomMetricId, type CustomVizType, type CustomWidget, type VisitDiff, type VisitSnapshot,
+} from '../data/overviewExtra3'
 import { useLocalStorage } from '../hooks/useLocalStorage'
 import { useI18n } from '../i18n/I18nContext'
 import type { TranslationKey } from '../i18n/translations'
@@ -98,6 +106,7 @@ export default function OverviewPage({ onNavigate = () => undefined }: { onNavig
   const { t } = useI18n()
   const { logAction } = useAudit()
   const { canEdit } = useRole()
+  const { registerUndo } = useGlobalUndo()
   const [order, setOrder] = useLocalStorage<PanelId[]>('opsphere-overview-panel-order', DEFAULT_ORDER)
   const [panelSizes, setPanelSizes] = useLocalStorage<Record<string, PanelSize>>('opsphere-overview-panel-sizes', {})
   const [widgetActive, setWidgetActive] = useLocalStorage<Record<ExtraId, boolean>>('opsphere-overview-widget-toggles', {
@@ -109,6 +118,24 @@ export default function OverviewPage({ onNavigate = () => undefined }: { onNavig
   const [okrEditing, setOkrEditing] = useState(false)
   const [moodLog, setMoodLog] = useLocalStorage<Record<string, number>>('opsphere-overview-mood', {})
   const [snapshots, setSnapshots] = useLocalStorage<Record<string, DailySnapshot>>('opsphere-overview-snapshots', {})
+
+  // --- Item 1: construtor de widget customizado ---
+  const [customWidgets, setCustomWidgets] = useLocalStorage<CustomWidget[]>('opsphere-overview-custom-widgets', [])
+  const [widgetBuilderOpen, setWidgetBuilderOpen] = useState(false)
+  const metricCatalog = useMemo(() => buildCustomMetricCatalog(), [])
+  const [draftMetricId, setDraftMetricId] = useState<CustomMetricId>(metricCatalog[0].id)
+  const [draftViz, setDraftViz] = useState<CustomVizType>('number')
+
+  // --- Item 2: modo narrativa do dia ---
+  const [narrative, setNarrative] = useLocalStorage('opsphere-overview-narrative', '')
+
+  // --- Item 3: principais contribuidores da semana ---
+  const topContributors = useMemo(() => computeTopContributors(), [])
+
+  // --- Item 4: mudanças desde a última visita ---
+  const [lastVisitSnapshot, setLastVisitSnapshot] = useLocalStorage<VisitSnapshot | null>('opsphere-overview-last-visit', null)
+  const [visitDiff, setVisitDiff] = useState<VisitDiff | null>(null)
+  const [firstVisit, setFirstVisit] = useState(false)
 
   const [dragged, setDragged] = useState<PanelId | null>(null)
   const [overId, setOverId] = useState<PanelId | null>(null)
@@ -135,6 +162,17 @@ export default function OverviewPage({ onNavigate = () => undefined }: { onNavig
       setSnapshots(s => ({ ...s, [today]: snap }))
       logAction('Snapshot diário salvo', `Métricas principais registradas para ${today}`)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  useEffect(() => {
+    const current = buildVisitSnapshot()
+    if (lastVisitSnapshot) {
+      setVisitDiff(diffVisitSnapshots(lastVisitSnapshot, current))
+    } else {
+      setFirstVisit(true)
+    }
+    setLastVisitSnapshot(current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -216,6 +254,36 @@ export default function OverviewPage({ onNavigate = () => undefined }: { onNavig
   const saveOkr = () => {
     if (okrEditing) logAction('Meta atualizada', `Meta de disponibilidade definida para ${okrGoal.toFixed(2)}%`)
     setOkrEditing(v => !v)
+  }
+
+  // --- Item 1: construtor de widget customizado ---
+  const addCustomWidget = () => {
+    const metric = metricCatalog.find(m => m.id === draftMetricId)
+    if (!metric) return
+    const widget: CustomWidget = { id: `cw-${Date.now()}`, metricId: draftMetricId, viz: draftViz, createdAt: Date.now() }
+    setCustomWidgets(list => [...list, widget])
+    logAction('Widget customizado criado', `"${metric.label}" adicionado como ${draftViz}`)
+    registerUndo('Widget customizado criado', () => setCustomWidgets(list => list.filter(w => w.id !== widget.id)))
+    setWidgetBuilderOpen(false)
+  }
+  const removeCustomWidget = (id: string) => {
+    const removed = customWidgets.find(w => w.id === id)
+    setCustomWidgets(list => list.filter(w => w.id !== id))
+    if (removed) {
+      logAction('Widget customizado removido', `Widget de métrica "${removed.metricId}" removido`)
+      registerUndo('Widget customizado removido', () => setCustomWidgets(list => [...list, removed]))
+    }
+  }
+  // --- Item 2: modo narrativa do dia ---
+  const generateNarrative = () => {
+    const successPipelines = pipelines.filter(p => p.status === 'success').length
+    const text = `Hoje tivemos ${successPipelines} deploys concluídos com sucesso e ${failingPipelines.length} com falha, `
+      + `${criticalTickets.length} ticket${criticalTickets.length === 1 ? '' : 's'} crítico${criticalTickets.length === 1 ? '' : 's'} (P0) em aberto `
+      + `e ${criticalVulns.length} vulnerabilidade${criticalVulns.length === 1 ? '' : 's'} crítica${criticalVulns.length === 1 ? '' : 's'} pendente${criticalVulns.length === 1 ? '' : 's'} de correção. `
+      + `A disponibilidade atual está em ${CURRENT_AVAILABILITY.toFixed(2).replace('.', ',')}% `
+      + (hasOpenCritical ? 'e o time segue mobilizado até a resolução dos incidentes em andamento.' : `e completamos ${streakDays} dia${streakDays === 1 ? '' : 's'} consecutivo${streakDays === 1 ? '' : 's'} sem incidentes críticos.`)
+    setNarrative(text)
+    logAction('Narrativa do dia gerada', 'Resumo textual do dia montado a partir das métricas atuais')
   }
 
   const panelBody: Record<PanelId, ReactNode> = {
@@ -392,9 +460,92 @@ export default function OverviewPage({ onNavigate = () => undefined }: { onNavig
       </div>
     </article>
 
+    <article className="panel" style={{ marginBottom: 14 }}>
+      <div className="panel__header"><div><span className="eyebrow">{t('overview.widgetBuilderEyebrow')}</span><h2>{t('overview.widgetBuilderSectionTitle')}</h2></div>
+        <button className="button button--tiny button--primary" disabled={!canEdit} onClick={() => setWidgetBuilderOpen(true)}><Plus size={13}/> {t('overview.widgetBuilderOpen')}</button>
+      </div>
+      {customWidgets.length === 0
+        ? <p className="custom-widgets-empty">{t('overview.widgetBuilderEmpty')}</p>
+        : <div className="custom-widgets-grid">
+          {customWidgets.map(widget => {
+            const metric = metricCatalog.find(m => m.id === widget.metricId)
+            if (!metric) return null
+            const value = metric.getValue()
+            return <article className="panel custom-widget-card" key={widget.id}>
+              <button className="custom-widget-card__remove" title={t('overview.widgetBuilderRemove')} onClick={() => removeCustomWidget(widget.id)}><Trash2 size={14}/></button>
+              <div className="custom-widget-card__body">
+                <span className="eyebrow">{metric.label}</span>
+                {widget.viz === 'number' && <strong className="custom-widget-card__number">{value}{metric.unit ?? ''}</strong>}
+                {widget.viz === 'bar' && <BarChart data={[{ label: metric.label, value }]} suffix={metric.unit ?? ''}/>}
+                {widget.viz === 'sparkline' && <Sparkline values={metric.trend}/>}
+              </div>
+            </article>
+          })}
+        </div>}
+    </article>
+
     <section className="dashboard-grid">
       {visibleOrder.map(id => panelBody[id])}
+
+      <article className="panel" key="narrative">
+        <div className="panel__header"><div><span className="eyebrow">{t('overview.narrativeEyebrow')}</span><h2>{t('overview.narrativeTitle')}</h2></div>
+          <div className="panel-header-actions"><BookOpen size={18}/></div>
+        </div>
+        {narrative ? <p className="narrative-box">{narrative}</p> : <p className="narrative-empty">{t('overview.narrativeEmpty')}</p>}
+        <div className="narrative-actions"><button className="button button--tiny" onClick={generateNarrative}>{t('overview.narrativeButton')}</button></div>
+      </article>
+
+      <article className="panel" key="contributors">
+        <div className="panel__header"><div><span className="eyebrow">{t('overview.contributorsEyebrow')}</span><h2>{t('overview.contributorsTitle')}</h2></div>
+          <div className="panel-header-actions"><Users size={18}/></div>
+        </div>
+        <div className="contributors-list">
+          {topContributors.map((c, i) => <div className="contributors-row" key={c.name}>
+            <span className="contributors-row__rank">{i + 1}</span>
+            <span className="contributors-row__name">{c.name}</span>
+            <span className="contributors-row__score">{c.score} pts</span>
+          </div>)}
+        </div>
+      </article>
+
+      <article className="panel" key="visitDiff">
+        <div className="panel__header"><div><span className="eyebrow">{t('overview.visitEyebrow')}</span><h2>{t('overview.visitTitle')}</h2></div>
+          <div className="panel-header-actions"><History size={18}/></div>
+        </div>
+        {firstVisit
+          ? <p className="visit-diff-empty">{t('overview.visitFirstTime')}</p>
+          : visitDiff && (visitDiff.ticketsDelta !== 0 || visitDiff.vulnsDelta !== 0 || visitDiff.runningDelta !== 0 || visitDiff.failingDelta !== 0)
+            ? <div className="visit-diff-list">
+              <span className="visit-diff-empty" style={{ padding: 0 }}>{t('overview.visitSince').replace('{min}', String(visitDiff.sinceMinutes))}</span>
+              {visitDiff.ticketsDelta !== 0 && <div className="visit-diff-row"><span>Tickets abertos</span><strong className={visitDiff.ticketsDelta > 0 ? 'up' : 'down'}>{visitDiff.ticketsDelta > 0 ? '+' : ''}{visitDiff.ticketsDelta}</strong></div>}
+              {visitDiff.vulnsDelta !== 0 && <div className="visit-diff-row"><span>Vulnerabilidades críticas</span><strong className={visitDiff.vulnsDelta > 0 ? 'up' : 'down'}>{visitDiff.vulnsDelta > 0 ? '+' : ''}{visitDiff.vulnsDelta}</strong></div>}
+              {visitDiff.runningDelta !== 0 && <div className="visit-diff-row"><span>Pipelines rodando</span><strong className={visitDiff.runningDelta > 0 ? 'up' : 'down'}>{visitDiff.runningDelta > 0 ? '+' : ''}{visitDiff.runningDelta}</strong></div>}
+              {visitDiff.failingDelta !== 0 && <div className="visit-diff-row"><span>Pipelines com falha</span><strong className={visitDiff.failingDelta > 0 ? 'up' : 'down'}>{visitDiff.failingDelta > 0 ? '+' : ''}{visitDiff.failingDelta}</strong></div>}
+            </div>
+            : <p className="visit-diff-empty">{t('overview.visitNoChanges')}</p>}
+      </article>
     </section>
+
+    {widgetBuilderOpen && <Modal title={t('overview.widgetBuilderTitle')} onClose={() => setWidgetBuilderOpen(false)}>
+      <div className="widget-builder-form">
+        <label>{t('overview.widgetBuilderMetricLabel')}
+          <select value={draftMetricId} onChange={e => setDraftMetricId(e.target.value as CustomMetricId)}>
+            {metricCatalog.map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+          </select>
+        </label>
+        <label>{t('overview.widgetBuilderVizLabel')}
+          <div className="widget-builder-viz-picker">
+            <button type="button" className={classNames(draftViz === 'number' && 'is-active')} onClick={() => setDraftViz('number')}>{t('overview.widgetBuilderVizNumber')}</button>
+            <button type="button" className={classNames(draftViz === 'bar' && 'is-active')} onClick={() => setDraftViz('bar')}>{t('overview.widgetBuilderVizBar')}</button>
+            <button type="button" className={classNames(draftViz === 'sparkline' && 'is-active')} onClick={() => setDraftViz('sparkline')}>{t('overview.widgetBuilderVizSparkline')}</button>
+          </div>
+        </label>
+        <div className="widget-builder-actions">
+          <button className="button button--tiny" onClick={() => setWidgetBuilderOpen(false)}>{t('overview.widgetBuilderCancel')}</button>
+          <button className="button button--tiny button--primary" onClick={addCustomWidget}>{t('overview.widgetBuilderAdd')}</button>
+        </div>
+      </div>
+    </Modal>}
 
     {kiosk && <div className="kiosk-overlay">
       <div className="kiosk-overlay__bar">
