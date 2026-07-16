@@ -1,0 +1,13 @@
+.ranking-list { display: flex; flex-direction: column; gap: 8px; }
+.ranking-list__row { display: grid; grid-template-columns: 28px 1.6fr 0.8fr 0.8fr; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); }
+.ranking-list__row .rank-badge { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: #6fd7a3; color: #06231a; font-weight: 700; font-size: 11px; flex-shrink: 0; }
+.ranking-list__row strong { font-size: 13px; }
+.ranking-list__stars { color: #f8c56a; font-size: 13px; }
+
+.suggestions-panel__select { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
+.suggestions-panel__select select { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.suggestions-panel__list { display: flex; flex-direction: column; gap: 8px; }
+.suggestions-panel__item { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
+.suggestions-panel__item strong { font-size: 13px; }
+.suggestions-panel__item small { color: var(--muted); display: block; }
+.suggestions-panel__match { font-size: 10px; padding: 2px 6px; border-radius: 999px; background: rgba(111,215,163,0.16); color: #6fd7a3; font-weight: 600; white-space: nowrap; }

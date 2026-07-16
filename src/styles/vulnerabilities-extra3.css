@@ -1,0 +1,18 @@
+.vuln-cve-catalog-search { margin-bottom: 12px; }
+.vuln-cve-catalog-list { display: flex; flex-direction: column; gap: 8px; }
+.vuln-cve-catalog-item { border: 1px solid var(--border, #26333f); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.vuln-cve-catalog-item header { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.vuln-cve-catalog-item code { font-size: 10px; font-weight: 600; }
+.vuln-cve-catalog-item p { margin: 0; font-size: 9px; color: var(--muted); line-height: 1.5; }
+
+.vuln-checklist { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; }
+.vuln-checklist-item { display: flex; align-items: center; gap: 8px; font-size: 9px; }
+.vuln-checklist-item input[type="checkbox"] { width: 13px; height: 13px; }
+.vuln-checklist-item.is-done span { text-decoration: line-through; color: var(--muted); }
+.vuln-checklist-progress { font-size: 8px; color: var(--muted); margin-top: 2px; }
+
+.vuln-age-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 12px; }
+.vuln-age-card { border: 1px solid var(--border, #26333f); border-radius: 8px; padding: 14px; text-align: center; }
+.vuln-age-card strong { display: block; font-size: 20px; }
+.vuln-age-card span { font-size: 9px; color: var(--muted); }
+.vuln-age-card small { display: block; font-size: 8px; color: var(--muted); margin-top: 4px; }

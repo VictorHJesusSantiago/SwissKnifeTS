@@ -1,0 +1,14 @@
+/* Item 6: non-prod namespace lifecycle / expiration countdown */
+.ns-expiry { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 12px; margin-top: 6px; }
+.ns-expiry.is-ok { background: rgba(52, 211, 153, .1); color: #34d399; }
+.ns-expiry.is-warning { background: rgba(248, 197, 106, .15); color: #f8c56a; }
+.ns-expiry.is-expired { background: rgba(255, 90, 60, .15); color: #ff5a3c; }
+.ns-expiry button { border: none; background: rgba(255, 255, 255, .12); color: inherit; border-radius: 6px; padding: 3px 8px; font-size: 11px; cursor: pointer; }
+.ns-expiry button:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Item 7/8 shared: namespace releases panel */
+.ns-releases { margin-top: 8px; }
+.ns-releases__toggle { display: flex; align-items: center; gap: 6px; background: none; border: none; color: var(--muted); font-size: 12px; cursor: pointer; padding: 0; }
+.ns-releases__list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ns-releases__list li { display: flex; justify-content: space-between; font-size: 12px; padding: 6px 8px; border-radius: 6px; background: #102034; }
+.ns-releases__list li strong { color: var(--text); }

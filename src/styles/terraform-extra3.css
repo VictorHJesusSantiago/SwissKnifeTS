@@ -1,0 +1,13 @@
+.tf-provider-table .data-table__row span:nth-child(4) { font-weight: 600; }
+.tf-provider-outdated { color: var(--warning); font-weight: 600; }
+.tf-provider-upgrade-hint { font-size: 8px; color: var(--muted); margin-top: 2px; display: block; }
+.tf-provider-uptodate { color: var(--healthy, #6ce5c4); font-weight: 600; }
+
+.tf-rightsizing-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.tf-rightsizing-item { border: 1px solid var(--border, #26333f); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.tf-rightsizing-item strong { font-size: 10px; }
+.tf-rightsizing-item p { margin: 0; font-size: 9px; color: var(--muted); line-height: 1.5; }
+.tf-rightsizing-item .tf-rightsizing-savings { font-size: 9px; color: var(--healthy, #6ce5c4); font-weight: 600; }
+
+.tf-lock-modal p { font-size: 10px; line-height: 1.6; }
+.tf-lock-waiting { display: flex; align-items: center; gap: 8px; font-size: 9px; color: var(--warning); margin-top: 8px; }

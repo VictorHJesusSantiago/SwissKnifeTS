@@ -1,0 +1,24 @@
+/* Item 1: topology time machine */
+.time-machine { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.time-machine select { min-width: 220px; }
+.time-machine input[type="range"] { flex: 1; min-width: 160px; }
+.time-machine__label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+/* Item 2: team ownership map */
+.graph-node__team-ring { opacity: .85; }
+.team-filter { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.team-filter__swatch { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+.team-filter button { display: flex; align-items: center; gap: 4px; }
+
+/* Item 3: SLA/uptime badge */
+.uptime-badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; margin-top: 8px; }
+.uptime-badge--healthy { background: rgba(52, 211, 153, .15); color: #34d399; }
+.uptime-badge--warning { background: rgba(248, 197, 106, .18); color: #f8c56a; }
+.uptime-badge--critical { background: rgba(255, 90, 60, .18); color: #ff5a3c; }
+
+/* Item 4: SPOF risk */
+.graph-node--spof .graph-node__circle { stroke: #ff5a3c; stroke-width: 3px; filter: drop-shadow(0 0 8px rgba(255, 90, 60, .65)); }
+.graph-node__spof-icon { font-size: 13px; }
+.spof-panel { display: flex; flex-direction: column; gap: 8px; }
+.spof-panel__item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: rgba(255, 90, 60, .1); font-size: 13px; }
+.spof-badge { display: inline-flex; align-items: center; gap: 6px; color: #ff5a3c; font-size: 12px; font-weight: 600; margin-top: 8px; }

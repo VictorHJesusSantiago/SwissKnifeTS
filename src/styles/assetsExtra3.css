@@ -1,0 +1,14 @@
+.request-panel__list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.request-panel__item { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; padding: 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
+.request-panel__item small { display: block; color: var(--muted); }
+.request-panel__justification { font-style: italic; margin-top: 2px; }
+.request-panel__history { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); }
+.request-panel__history-item { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+
+.depreciation-chart-panel .panel__header select { padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.depreciation-chart { display: flex; align-items: flex-end; gap: 14px; padding: 16px 6px 0; height: 180px; }
+.depreciation-chart__col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; flex: 1; height: 100%; }
+.depreciation-chart__bar-wrap { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+.depreciation-chart__bar { width: 60%; margin: 0 auto; border-radius: 6px 6px 0 0; background: linear-gradient(180deg, #8097ff, #6fd7a3); min-height: 2px; transition: height 0.2s ease; }
+.depreciation-chart__col strong { font-size: 11px; }
+.depreciation-chart__col small { font-size: 10px; color: var(--muted); }

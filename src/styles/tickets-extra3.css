@@ -1,0 +1,9 @@
+/* Extras 3: pós-mortem, votos, recorrência, histograma de idade por coluna */
+.postmortem-panel{display:flex;flex-direction:column;gap:8px;padding:12px;margin:10px 0;border:1px solid var(--border);border-radius:10px;background:#081522}
+.postmortem-panel label{display:flex;flex-direction:column;gap:4px;font-size:9px;color:var(--muted)}
+.postmortem-panel textarea{min-height:60px;padding:8px;border-radius:7px;font-size:9px;resize:vertical}
+.recurring-warning{display:flex;flex-direction:column;gap:4px;padding:10px;margin:0 20px 8px;border:1px solid var(--accent);border-radius:8px;background:#0e2230;color:#7fd6c4;font-size:8px}
+.vote-button{display:flex;align-items:center;gap:4px;border:1px solid var(--border);background:#0e1d2e;color:#aeb9c8;border-radius:10px;padding:2px 8px;font-size:9px;cursor:pointer}
+.vote-button.is-voted{border-color:var(--accent);color:var(--accent)}
+.age-histogram-panel{display:flex;flex-direction:column;gap:14px;padding:12px;margin-bottom:12px;border:1px solid var(--border);border-radius:10px;background:#081522}
+.age-histogram-panel__column h4{margin:0 0 6px;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}

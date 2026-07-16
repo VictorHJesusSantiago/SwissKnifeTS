@@ -1,0 +1,13 @@
+/* Extras 3: distribuição de níveis, dashboards salvos, histórico de buscas, retenção simulada */
+.level-chart-panel{display:flex;flex-direction:column;gap:6px;padding:10px 12px;margin-bottom:10px;border:1px solid var(--border);border-radius:10px;background:#081522}
+.log-dashboards{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;margin-bottom:10px;border:1px solid var(--border);border-radius:10px;background:#081522}
+.log-dashboard-chip{display:flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--accent);border-radius:14px;color:var(--accent);background:#0e1d2e;font-size:8px;cursor:pointer}
+.log-dashboard-chip button{border:0;background:none;color:#62788f;display:flex;align-items:center}
+.log-dashboard-chip button:hover{color:var(--danger)}
+.search-history{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;margin-bottom:10px}
+.search-history-chip{padding:3px 9px;border-radius:12px;font-size:8px;background:#0e1d2e;color:#aeb9c8;border:1px solid var(--border);cursor:pointer}
+.search-history-chip:hover{border-color:var(--accent);color:var(--accent)}
+.retention-panel{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 12px;margin-bottom:10px;border:1px solid var(--border);border-radius:10px;background:#081522}
+.retention-panel input[type="number"]{width:70px;height:31px;padding:0 8px;border-radius:7px;font-size:9px}
+.retention-panel__count{color:var(--warning);font-size:9px;font-weight:600}
+.log-row.is-purge-candidate{opacity:.4;text-decoration:line-through}
