@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Download, FileJson, FileText, Filter, Gauge, Layers, Link2, RefreshCw, Scale, Search, ShieldCheck, ShieldOff, Star, Timer } from 'lucide-react'
+import { AlertTriangle, BookOpen, CheckCircle2, Download, FileJson, FileText, Filter, Gauge, Hourglass, Layers, Link2, RefreshCw, Scale, Search, ShieldCheck, ShieldOff, Star, Timer } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { Badge } from '../components/ui/Badge'
 import { BarChart } from '../components/charts/BarChart'
@@ -14,11 +14,13 @@ import { assets, serviceNodes, vulnerabilities as initial } from '../data/mockDa
 import { assigneeOptions } from '../data/ticketsExtra'
 import { baseProbabilityBySeverity, detectedAtById, slaDaysBySeverity } from '../data/vulnerabilitiesExtra'
 import { runbookSuggestionBySeverity, scanCandidates, weeklyTrend } from '../data/vulnerabilitiesExtra2'
+import { cveCatalog, remediationChecklistItems } from '../data/vulnerabilitiesExtra3'
 import { useI18n } from '../i18n/I18nContext'
 import { getSeed, mulberry32 } from '../utils/seed'
 import type { Vulnerability } from '../types'
 import '../styles/vulnerabilities-extra.css'
 import '../styles/vulnerabilities-extra2.css'
+import '../styles/vulnerabilities-extra3.css'
 
 type SortKey='cvss'|'severity'|'due'
 const severityRank:Record<Vulnerability['severity'],number>={'Crítica':4,'Alta':3,'Média':2,'Baixa':1}
@@ -32,7 +34,7 @@ function download(filename:string,content:string,type='text/csv'){
  URL.revokeObjectURL(url)
 }
 
-type ExtraTab = 'table' | 'matrix' | 'timeline' | 'compliance' | 'byPackage' | 'posture' | 'compare'
+type ExtraTab = 'table' | 'matrix' | 'timeline' | 'compliance' | 'byPackage' | 'posture' | 'compare' | 'catalog' | 'age'
 
 // Normaliza um nome para comparação aproximada (minúsculas, sem acentos/hífens/espaços extras).
 function normalize(s: string): string {
@@ -98,6 +100,47 @@ export default function VulnerabilitiesPage(){
  const assetOptions = useMemo(() => Array.from(new Set(items.map(v => v.asset))), [items])
  const [compareA, setCompareA] = useState(assetOptions[0])
  const [compareB, setCompareB] = useState(assetOptions[1] ?? assetOptions[0])
+
+ // --- Catálogo local de CVEs conhecidas (independente das vulnerabilidades do projeto) ---
+ const [catalogQuery, setCatalogQuery] = useState('')
+ const filteredCatalog = useMemo(() => {
+  const q = catalogQuery.trim().toLowerCase()
+  if (!q) return cveCatalog
+  return cveCatalog.filter(c => c.id.toLowerCase().includes(q) || c.description.toLowerCase().includes(q))
+ }, [catalogQuery])
+
+ // --- Checklist de remediação por vulnerabilidade (persistida) ---
+ const [checklistById, setChecklistById] = useLocalStorage<Record<string, boolean[]>>('opsphere-vuln-checklist', {})
+ const toggleChecklistItem = (vulnId: string, itemIndex: number) => {
+  setChecklistById(map => {
+   const current = map[vulnId] ?? remediationChecklistItems.map(() => false)
+   const next = current.slice()
+   next[itemIndex] = !next[itemIndex]
+   return { ...map, [vulnId]: next }
+  })
+ }
+
+ // --- Idade média (dias) das vulnerabilidades abertas, por severidade ---
+ const ageBySeverity = useMemo(() => {
+  const open = items.filter(v => v.status === 'Aberta' || v.status === 'Em correção')
+  const result: Record<string, { avgDays: number; count: number }> = {}
+  ;(['Crítica', 'Alta', 'Média', 'Baixa'] as const).forEach(sev => {
+   const group = open.filter(v => v.severity === sev)
+   if (group.length === 0) { result[sev] = { avgDays: 0, count: 0 }; return }
+   const totalDays = group.reduce((sum, v) => {
+    const detected = detectedAtById[v.id]
+    if (detected) return sum + Math.max(0, (NOW.getTime() - new Date(detected).getTime()) / 86400000)
+    // Fallback: sem data de detecção mockada, estima a idade a partir do texto de SLA
+    // restante (`due`, ex: "7 dias") em relação ao prazo total de SLA da severidade.
+    const slaDays = slaDaysBySeverity[v.severity] ?? 30
+    const match = v.due.match(/\d+/)
+    const remainingDays = match ? Number(match[0]) : (v.due === 'Hoje' ? 0 : slaDays)
+    return sum + Math.max(0, slaDays - remainingDays)
+   }, 0)
+   result[sev] = { avgDays: Math.round(totalDays / group.length), count: group.length }
+  })
+  return result
+ }, [items])
 
  const visible=useMemo(()=>{
   const filtered=items.filter(v=>(severity==='Todas'||v.severity===severity)&&(`${v.cve} ${v.package} ${v.asset}`).toLowerCase().includes(query.toLowerCase()))
@@ -289,6 +332,8 @@ export default function VulnerabilitiesPage(){
   <button className={tab==='posture'?'is-active':''} onClick={()=>setTab('posture')}><ShieldCheck size={13}/> {t('vulnerabilities.tab.posture')}</button>
   <button className={tab==='compare'?'is-active':''} onClick={()=>setTab('compare')}><Scale size={13}/> {t('vulnerabilities.tab.compare')}</button>
   <button className={tab==='compliance'?'is-active':''} onClick={()=>setTab('compliance')}><FileText size={13}/> {t('vulnerabilities.tab.compliance')}</button>
+  <button className={tab==='catalog'?'is-active':''} onClick={()=>setTab('catalog')}><BookOpen size={13}/> {t('vulnerabilities.tab.catalog')}</button>
+  <button className={tab==='age'?'is-active':''} onClick={()=>setTab('age')}><Hourglass size={13}/> {t('vulnerabilities.tab.age')}</button>
  </div>
 
  {tab==='table' && <section className="panel table-panel"><div className="table-toolbar"><label className="search-input"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder={t('vulnerabilities.searchPlaceholder')}/></label><Filter size={16}/><select value={severity} onChange={e=>setSeverity(e.target.value)}><option>Todas</option><option>Crítica</option><option>Alta</option><option>Média</option><option>Baixa</option></select></div>
@@ -388,6 +433,35 @@ export default function VulnerabilitiesPage(){
   </div>
  </section>}
 
+ {tab==='catalog' && <section className="panel" style={{padding:16}}>
+  <label className="search-input vuln-cve-catalog-search"><Search size={16}/><input value={catalogQuery} onChange={e=>setCatalogQuery(e.target.value)} placeholder={t('vulnerabilities.catalog.searchPlaceholder')}/></label>
+  {filteredCatalog.length===0 && <p className="empty-hint">{t('vulnerabilities.catalog.empty')} "{catalogQuery}".</p>}
+  <div className="vuln-cve-catalog-list">
+   {filteredCatalog.map(c => <div className="vuln-cve-catalog-item" key={c.id}>
+    <header><code>{c.id}</code><Badge tone={c.typicalSeverity}>{c.typicalSeverity}</Badge></header>
+    <p>{c.description}</p>
+   </div>)}
+  </div>
+ </section>}
+
+ {tab==='age' && <section className="panel" style={{padding:16}}>
+  <h3 style={{margin:'0 0 4px',fontSize:'11px'}}>{t('vulnerabilities.age.title')}</h3>
+  <p style={{fontSize:'9px',color:'var(--muted)',margin:'0 0 4px',maxWidth:640}}>{t('vulnerabilities.age.hint')}</p>
+  <div className="vuln-age-grid">
+   {(['Crítica','Alta','Média','Baixa'] as const).map(sev => {
+    const info = ageBySeverity[sev]
+    return <div className="vuln-age-card" key={sev}>
+     <Badge tone={sev}>{sev}</Badge>
+     {info.count > 0 ? <>
+      <strong>{info.avgDays}</strong>
+      <span>{t('vulnerabilities.age.days')}</span>
+      <small>{info.count}</small>
+     </> : <small>{t('vulnerabilities.age.noneOpen')}</small>}
+    </div>
+   })}
+  </div>
+ </section>}
+
  {detail&&<Modal title={detail.cve} onClose={()=>setDetail(null)}>
   <div className="vuln-detail">
    <dl>
@@ -408,6 +482,20 @@ export default function VulnerabilitiesPage(){
    </div>
 
    <div className="vuln-runbook-hint"><Link2 size={12}/> {t('vulnerabilities.detail.runbookSuggestion')}: {runbookSuggestionBySeverity[detail.severity]}</div>
+
+   <div className="vuln-checklist-wrap">
+    <label style={{display:'block',fontSize:'8px',color:'var(--muted)',marginBottom:5}}>{t('vulnerabilities.checklist.title')}</label>
+    <div className="vuln-checklist">
+     {remediationChecklistItems.map((item, idx) => {
+      const done = (checklistById[detail.id] ?? [])[idx] ?? false
+      return <label className={`vuln-checklist-item${done ? ' is-done' : ''}`} key={idx}>
+       <input type="checkbox" checked={done} disabled={!canEdit} onChange={()=>toggleChecklistItem(detail.id, idx)}/>
+       <span>{item}</span>
+      </label>
+     })}
+    </div>
+    <div className="vuln-checklist-progress">{(checklistById[detail.id] ?? []).filter(Boolean).length}/{remediationChecklistItems.length} {t('vulnerabilities.checklist.progress')}</div>
+   </div>
 
    <div className="link-panel">
     <div className="link-panel-group">
