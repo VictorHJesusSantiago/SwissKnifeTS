@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Compass, Dices, Download, HelpCircle, Play, RotateCcw, Save, Shield, Sparkles, Star, Trash2, Upload } from 'lucide-react'
+import { Compass, Dices, Download, EyeOff, HelpCircle, LockKeyhole, Play, RotateCcw, Save, Shield, Sparkles, Star, Trash2, Upload } from 'lucide-react'
 import { useTour } from '../context/TourContext'
 import { PageHeader } from '../components/ui/PageHeader'
 import { useTheme } from '../context/ThemeContext'
@@ -13,9 +13,12 @@ import { useUIPrefs, accentColors, type AccentColor } from '../context/UIPrefsCo
 import { useNavigationStats } from '../context/NavigationStatsContext'
 import { useErrorLog } from '../context/ErrorLogContext'
 import { useDemoMode } from '../context/DemoModeContext'
+import { useIdleLock } from '../context/IdleLockContext'
 import { navigation } from '../config/navigation'
 import { exportBackup, importBackup, clearAllData } from '../utils/backup'
 import { ShortcutEditor } from '../components/settings/ShortcutEditor'
+import { SessionReplay } from '../components/settings/SessionReplay'
+import { PrintButton } from '../components/ui/PrintButton'
 import { classNames } from '../utils/format'
 import { getSeed, setSeed, randomSeed } from '../utils/seed'
 import { listProfiles, saveProfile, applyProfile, deleteProfile } from '../utils/configProfiles'
@@ -40,6 +43,8 @@ export default function SettingsPage() {
   const { visitCounts } = useNavigationStats()
   const { errors, clearErrors } = useErrorLog()
   const demo = useDemoMode()
+  const idleLock = useIdleLock()
+  const { usageSecondsToday } = useNavigationStats()
   const fileRef = useRef<HTMLInputElement>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [seedValue, setSeedValue] = useState(() => getSeed())
@@ -205,11 +210,34 @@ export default function SettingsPage() {
       </article>
 
       <article className="panel">
-        <div className="panel__header"><div><span className="eyebrow">PRODUTIVIDADE</span><h2>{t('settings.shortcuts')}</h2></div></div>
+        <div className="panel__header"><div><span className="eyebrow">PRODUTIVIDADE</span><h2>{t('settings.shortcuts')}</h2></div><PrintButton label="Imprimir atalhos"/></div>
         <ShortcutEditor/>
         <div className="settings-block">
           <button className="button button--full" onClick={startTour}><Compass size={15}/> Rever tour guiado</button>
         </div>
+      </article>
+
+      <article className="panel">
+        <div className="panel__header"><div><span className="eyebrow">PRIVACIDADE E APRESENTAÇÃO</span><h2>Anonimizar &amp; watermark</h2></div><EyeOff size={17}/></div>
+        <div className="settings-block">
+          <div className="settings-row"><span>Som de notificação</span><div className="segmented"><button className={classNames(uiPrefs.soundEnabled && 'is-active')} onClick={uiPrefs.toggleSound}>{uiPrefs.soundEnabled ? 'Ativado' : 'Desativado'}</button></div></div>
+          <div className="settings-row"><span>Modo anonimizar (desfoca dados ao passar o mouse)</span><div className="segmented"><button className={classNames(uiPrefs.anonymizeMode && 'is-active')} onClick={uiPrefs.toggleAnonymize}>{uiPrefs.anonymizeMode ? 'Ativado' : 'Desativado'}</button></div></div>
+          <div className="settings-row"><span>Marca d'água "dados fictícios"</span><div className="segmented"><button className={classNames(uiPrefs.watermarkEnabled && 'is-active')} onClick={uiPrefs.toggleWatermark}>{uiPrefs.watermarkEnabled ? 'Ativado' : 'Desativado'}</button></div></div>
+        </div>
+      </article>
+
+      <article className="panel">
+        <div className="panel__header"><div><span className="eyebrow">SEGURANÇA</span><h2>Auto-bloqueio por inatividade</h2></div><LockKeyhole size={17}/></div>
+        <div className="settings-block">
+          <div className="settings-row"><span>Ativar auto-bloqueio</span><div className="segmented"><button className={classNames(idleLock.enabled && 'is-active')} onClick={idleLock.toggleEnabled}>{idleLock.enabled ? 'Ativado' : 'Desativado'}</button></div></div>
+          <div className="settings-row"><span>Bloquear após (minutos)</span><input type="number" min={1} max={60} style={{ width: 90 }} value={idleLock.timeoutMinutes} onChange={e => idleLock.setTimeoutMinutes(Number(e.target.value))}/></div>
+          <div className="settings-row"><span>Tempo de uso hoje</span><strong>{Math.floor(usageSecondsToday / 60)}min {usageSecondsToday % 60}s</strong></div>
+        </div>
+      </article>
+
+      <article className="panel panel--wide">
+        <div className="panel__header"><div><span className="eyebrow">SESSÃO</span><h2>Replay da sessão</h2></div></div>
+        <SessionReplay/>
       </article>
 
       <article className="panel">
