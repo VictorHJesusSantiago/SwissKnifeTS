@@ -10,12 +10,14 @@ import { useFavorites } from '../context/FavoritesContext'
 import { useNotifications } from '../context/NotificationContext'
 import { useRole } from '../context/RoleContext'
 import { buildLiveMessage, liveLevels, liveServices, normalizeLogMessage, randomTraceId, type AlertRule } from '../data/logsExtra'
+import { logLevelColors, logLevelOrder, simulateLogAgeDays, type LogDashboard } from '../data/logsExtra3'
 import { logs as initialLogs } from '../data/mockData'
 import { useLocalStorage } from '../hooks/useLocalStorage'
 import { useI18n } from '../i18n/I18nContext'
 import type { LogEntry } from '../types'
 import '../styles/logs-extra.css'
 import '../styles/logs-extra2.css'
+import '../styles/logs-extra3.css'
 
 interface SavedQuery { id: string; label: string; query: string }
 
@@ -65,6 +67,17 @@ export default function LogsPage() {
   const [showAnomaly, setShowAnomaly] = useState(false)
   const [showTopServices, setShowTopServices] = useState(false)
   const [showTimeline, setShowTimeline] = useState(false)
+  const [showLevelChart, setShowLevelChart] = useState(false)
+
+  // --- Dashboards salvos (combinação de filtros) ---
+  const [dashboards, setDashboards] = useLocalStorage<LogDashboard[]>('opsphere-logs-dashboards', [])
+
+  // --- Histórico de buscas recentes ---
+  const [searchHistory, setSearchHistory] = useLocalStorage<string[]>('opsphere-logs-search-history', [])
+
+  // --- Simulador de retenção ---
+  const [retentionDays, setRetentionDays] = useState(30)
+  const [appliedRetentionDays, setAppliedRetentionDays] = useState<number | null>(null)
 
   useEffect(() => {
     if (!live) return
@@ -252,6 +265,53 @@ export default function LogsPage() {
     return [...counts.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value)
   }, [logList])
 
+  // --- Distribuição de níveis (donut/bar) ---
+  const levelDistribution = useMemo(() => {
+    const total = filtered.length
+    return logLevelOrder.map(lvl => {
+      const count = filtered.filter(log => log.level === lvl).length
+      return { label: `${lvl} (${total ? Math.round((count / total) * 100) : 0}%)`, value: count, color: logLevelColors[lvl] }
+    })
+  }, [filtered])
+
+  // --- Simulador de retenção ---
+  const purgeCandidateIds = useMemo(() => {
+    if (appliedRetentionDays === null) return new Set<number>()
+    const ids = logList.filter(log => simulateLogAgeDays(log.id) > appliedRetentionDays).map(log => log.id)
+    return new Set(ids)
+  }, [logList, appliedRetentionDays])
+
+  const applyRetention = () => {
+    setAppliedRetentionDays(retentionDays)
+    logAction('Retenção simulada aplicada', `Reter logs por ${retentionDays} dias`)
+  }
+  const resetRetention = () => setAppliedRetentionDays(null)
+
+  // --- Dashboards salvos ---
+  const saveDashboard = () => {
+    const name = window.prompt(t('logs.dashboardNamePrompt'))
+    if (!name) return
+    const dashboard: LogDashboard = { id: `dash${Date.now()}`, name, query, regex: regexInput, level, tagFilter, createdAt: Date.now() }
+    setDashboards(list => [dashboard, ...list].slice(0, 20))
+    logAction('Dashboard de logs salvo', `"${name}" salvo com filtros combinados`)
+    addNotification('Dashboard salvo', `O dashboard "${name}" foi salvo.`, 'healthy')
+  }
+  const applyDashboard = (dashboard: LogDashboard) => {
+    setQuery(dashboard.query)
+    setRegexInput(dashboard.regex)
+    setLevel(dashboard.level)
+    setTagFilter(dashboard.tagFilter)
+  }
+  const removeDashboard = (id: string) => setDashboards(list => list.filter(d => d.id !== id))
+
+  // --- Histórico de buscas ---
+  const commitSearchHistory = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed) return
+    setSearchHistory(list => [trimmed, ...list.filter(item => item !== trimmed)].slice(0, 10))
+  }
+  const applyHistoryEntry = (value: string) => setQuery(value)
+
   return <>
     <PageHeader eyebrow={t('logs.eyebrow')} title={t('logs.title')} description={t('logs.subtitle')} actions={
       <div className="export-menu">
@@ -274,6 +334,31 @@ export default function LogsPage() {
       <button className="button button--compact" onClick={saveCurrentQuery} disabled={!query.trim() || !canEdit} title={!canEdit ? t('pipelines.viewerBlocked') : undefined}><Bookmark size={13} /> {t('logs.saveCurrentQuery')}</button>
     </section>
 
+    {searchHistory.length > 0 && <section className="search-history">
+      <span className="saved-queries__label">{t('logs.searchHistory')}</span>
+      {searchHistory.map(entry => <span className="search-history-chip" key={entry} onClick={() => applyHistoryEntry(entry)}>{entry}</span>)}
+    </section>}
+
+    <section className="log-dashboards">
+      <span className="saved-queries__label">{t('logs.dashboards')}</span>
+      {dashboards.length === 0 && <span className="saved-queries__label">{t('logs.noneYet')}</span>}
+      {dashboards.map(dashboard => <span className="log-dashboard-chip" key={dashboard.id} onClick={() => applyDashboard(dashboard)}>
+        {dashboard.name}
+        <button onClick={event => { event.stopPropagation(); removeDashboard(dashboard.id) }}><X size={11} /></button>
+      </span>)}
+      <button className="button button--compact" onClick={saveDashboard} disabled={!canEdit} title={!canEdit ? t('pipelines.viewerBlocked') : undefined}><Bookmark size={13} /> {t('logs.saveDashboard')}</button>
+    </section>
+
+    <section className="retention-panel">
+      <span className="saved-queries__label">{t('logs.retentionPanel')}</span>
+      <label>{t('logs.retentionDaysLabel')}<input type="number" min={1} value={retentionDays} onChange={e => setRetentionDays(Math.max(1, Number(e.target.value) || 1))} /></label>
+      <button className="button button--compact" onClick={applyRetention} disabled={!canEdit} title={!canEdit ? t('pipelines.viewerBlocked') : undefined}>{t('logs.retentionApply')}</button>
+      {appliedRetentionDays !== null && <>
+        <span className="retention-panel__count">{purgeCandidateIds.size} {t('logs.retentionPurgeCount')}</span>
+        <button className="button button--compact" onClick={resetRetention}>{t('logs.retentionReset')}</button>
+      </>}
+    </section>
+
     <section className="alert-rules">
       <span className="saved-queries__label"><AlertTriangle size={12} /> {t('logs.alertRules')}</span>
       <select value={ruleLevel} onChange={e => setRuleLevel(e.target.value as AlertRule['level'])}>
@@ -291,7 +376,7 @@ export default function LogsPage() {
     </section>
 
     <section className="logs-toolbar panel">
-      <label className="search-input"><Search size={17} /><input value={query} onChange={e => setQuery(e.target.value)} placeholder={t('logs.searchPlaceholder')} />{query && <button onClick={() => setQuery('')}><Trash2 size={15} /></button>}</label>
+      <label className="search-input"><Search size={17} /><input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') commitSearchHistory(query) }} onBlur={() => commitSearchHistory(query)} placeholder={t('logs.searchPlaceholder')} />{query && <button onClick={() => setQuery('')}><Trash2 size={15} /></button>}</label>
       <select value={level} onChange={e => setLevel(e.target.value)}><option>{t('logs.levelAll')}</option><option>ERROR</option><option>WARN</option><option>INFO</option><option>DEBUG</option></select>
       <select><option>{t('logs.allServices')}</option><option>gateway</option><option>checkout-api</option></select>
       <select value={tagFilter} onChange={e => setTagFilter(e.target.value)}>
@@ -311,6 +396,7 @@ export default function LogsPage() {
       <button className={`button button--compact ${showAnomaly ? 'button--live' : ''}`} onClick={() => setShowAnomaly(v => !v)}>{t('logs.anomalyPanel')}</button>
       <button className={`button button--compact ${showTopServices ? 'button--live' : ''}`} onClick={() => setShowTopServices(v => !v)}>{t('logs.topServices')}</button>
       <button className={`button button--compact ${showTimeline ? 'button--live' : ''}`} onClick={() => setShowTimeline(v => !v)}>{t('logs.timeline')}</button>
+      <button className={`button button--compact ${showLevelChart ? 'button--live' : ''}`} onClick={() => setShowLevelChart(v => !v)}>{t('logs.levelChart')}</button>
       <ExportCsvButton filename="opsphere-logs-selecionados" rows={selectedRowsForExport} label={`${t('logs.exportSelected')} (${selectedRows.length})`} />
     </div>
 
@@ -343,10 +429,12 @@ export default function LogsPage() {
 
     {showTimeline && <div className="top-services-panel"><BarChart data={timelineData} /></div>}
 
+    {showLevelChart && <div className="level-chart-panel"><BarChart data={levelDistribution} /></div>}
+
     <div className="log-summary"><span><strong>{filtered.length}</strong> {t('logs.eventsFound')}</span><span className={live ? 'text-success' : ''}><i className="pulse-dot" /> {live ? t('logs.receivingEvents') : t('logs.streamPaused')}</span><span>{t('logs.window60min')}</span></div>
 
     {!groupMode && <section className="log-console" ref={consoleRef}>
-      {filtered.length ? filtered.map(log => <div className={`log-row ${selectedTrace === log.trace ? 'is-trace-match' : ''}`} key={log.id} onClick={() => setSelectedTrace(log.trace)}>
+      {filtered.length ? filtered.map(log => <div className={`log-row ${selectedTrace === log.trace ? 'is-trace-match' : ''} ${purgeCandidateIds.has(log.id) ? 'is-purge-candidate' : ''}`} key={log.id} onClick={() => setSelectedTrace(log.trace)}>
         <input className="log-select-checkbox" type="checkbox" checked={!!selectedIds[log.id]} onClick={event => event.stopPropagation()} onChange={() => toggleSelect(log.id)} />
         <time>{log.timestamp}</time>
         <Badge tone={log.level}>{log.level}</Badge>
