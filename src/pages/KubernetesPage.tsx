@@ -1,5 +1,5 @@
-import { Activity, AlertOctagon, Box, CheckCircle2, Cpu, Minus, MoreHorizontal, Plus, Power, RefreshCcw, RotateCw, Server, ShieldOff, Star, X } from 'lucide-react'
-import { useState } from 'react'
+import { Activity, AlertOctagon, Box, CheckCircle2, ChevronDown, ChevronUp, Cpu, Minus, MoreHorizontal, Plus, Power, RefreshCcw, RotateCw, Server, ShieldOff, Star, Users, X } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { BarChart } from '../components/charts/BarChart'
 import { DonutChart } from '../components/charts/DonutChart'
 import { KubeTerminal } from '../components/kubernetes/KubeTerminal'
@@ -11,9 +11,12 @@ import { useNotifications } from '../context/NotificationContext'
 import { useRole } from '../context/RoleContext'
 import { restartingPods } from '../data/kubernetesExtra2'
 import { scalableWorkloads, type ScalableWorkload } from '../data/kubernetesExtra'
+import { baseClusterNodeCount, baseClusterNodeSpec, baseClusterUsedCpu, baseClusterUsedMem } from '../data/kubernetesExtra3'
+import { mockRbacUsers, rbacBindings } from '../data/namespacesExtra3'
 import { useI18n } from '../i18n/I18nContext'
 import { useLocalStorage } from '../hooks/useLocalStorage'
 import '../styles/kubernetes-extra.css'
+import '../styles/kubernetes-extra3.css'
 
 const pods=[['checkout-api-7fd8c','commerce','Running','230m','412Mi','2'],['payments-5db77','finance','Running','410m','688Mi','0'],['catalog-6c8b9','commerce','Running','180m','356Mi','1'],['identity-8fd42','platform','Pending','—','—','0'],['worker-queue-4ab22','jobs','CrashLoop','120m','228Mi','12']]
 
@@ -41,6 +44,24 @@ export default function KubernetesPage(){
  // --- item 16: multi-terminal tabs ---
  const [terminals,setTerminals]=useState<TerminalTab[]>([{id:'t1',label:'Terminal 1',context:'default'}])
  const [activeTerminal,setActiveTerminal]=useState('t1')
+
+ // --- item 5: cluster capacity planning simulator ---
+ const [extraNodes,setExtraNodes]=useState(0)
+ const [rbacOpen,setRbacOpen]=useState(false)
+
+ const simNodeCount = baseClusterNodeCount + extraNodes
+ const totalCpu = simNodeCount * baseClusterNodeSpec.cpuCores
+ const totalMem = simNodeCount * baseClusterNodeSpec.memGiB
+ const cpuUtilPct = Math.min(100, Math.round((baseClusterUsedCpu / totalCpu) * 100))
+ const memUtilPct = Math.min(100, Math.round((baseClusterUsedMem / totalMem) * 100))
+
+ const addSimNode=(delta:number)=>{
+  setExtraNodes(v=>{
+   const next = Math.max(-baseClusterNodeCount+1, Math.min(10, v+delta))
+   logAction('Kubernetes: simulação de capacidade', `${delta>0?'+':''}${delta} node(s) → total ${baseClusterNodeCount+next} nodes`)
+   return next
+  })
+ }
 
  const refresh=()=>{setRefreshing(true);setTimeout(()=>setRefreshing(false),900)}
 
@@ -133,6 +154,23 @@ export default function KubernetesPage(){
   </div>
  })}</div></article></section>
 
+ <article className="panel capacity-sim"><div className="panel__header"><div><span className="eyebrow">Planejamento de capacidade</span><h2>Simulador de capacidade do cluster</h2></div><Server size={18}/></div>
+  <div className="capacity-sim__controls">
+   <span className="capacity-sim__stepper"><button disabled={extraNodes<=-(baseClusterNodeCount-1)} onClick={()=>addSimNode(-1)}><Minus size={14}/></button><strong>{simNodeCount} nodes</strong><button disabled={extraNodes>=10} onClick={()=>addSimNode(1)}><Plus size={14}/></button></span>
+   <span className="capacity-sim__meta">{extraNodes>0?`+${extraNodes}`:extraNodes<0?extraNodes:'sem alteração'} vs. baseline de {baseClusterNodeCount} nodes ({baseClusterNodeSpec.cpuCores} vCPU / {baseClusterNodeSpec.memGiB} GiB cada)</span>
+  </div>
+  <div className="capacity-sim__bars">
+   <div>
+    <span className="capacity-sim__meta">CPU: {baseClusterUsedCpu} / {totalCpu} vCPU ({cpuUtilPct}%)</span>
+    <div className={`quota-track ${cpuUtilPct>=90?'is-danger':cpuUtilPct>=75?'is-warning':''}`}><i style={{width:`${cpuUtilPct}%`}}/></div>
+   </div>
+   <div>
+    <span className="capacity-sim__meta">Memória: {baseClusterUsedMem} / {totalMem} GiB ({memUtilPct}%)</span>
+    <div className={`quota-track ${memUtilPct>=90?'is-danger':memUtilPct>=75?'is-warning':''}`}><i style={{width:`${memUtilPct}%`}}/></div>
+   </div>
+  </div>
+ </article>
+
  <article className="panel scaling-panel"><div className="panel__header"><div><span className="eyebrow">{t('kubernetes.scaling.eyebrow')}</span><h2>{t('kubernetes.scaling.title')}</h2></div><Activity size={18}/></div>
  <div className="scaling-panel__body">
   <div className="scaling-controls">
@@ -169,5 +207,18 @@ export default function KubernetesPage(){
 
  <article className="panel table-panel"><div className="panel__header"><div><span className="eyebrow">Confiabilidade</span><h2>Pods reiniciando com frequência</h2></div><AlertOctagon size={15}/></div><div className="data-table"><div className="data-table__head"><span>Pod</span><span>Namespace</span><span>Reinícios</span><span>Último reinício</span></div>{[...restartingPods].sort((a,b)=>b.restarts-a.restarts).map(p=><div className="data-table__row" key={p.name}><span><Box size={15}/><strong>{p.name}</strong></span><span>{p.namespace}</span><span style={{color:p.restarts>=8?'var(--danger)':p.restarts>=4?'var(--warning)':'var(--muted)',fontWeight:600}}>{p.restarts}</span><span>{p.lastRestart}</span></div>)}</div></article>
 
- <article className="panel table-panel"><div className="panel__header"><div><span className="eyebrow">{t('kubernetes.workloads.eyebrow')}</span><h2>{t('kubernetes.workloads.title')}</h2></div><span className="text-success"><CheckCircle2 size={15}/> {t('kubernetes.workloads.monitoring')}</span></div><div className="data-table"><div className="data-table__head"><span>{t('kubernetes.table.pod')}</span><span>{t('kubernetes.table.namespace')}</span><span>{t('kubernetes.table.status')}</span><span>{t('kubernetes.table.cpu')}</span><span>{t('kubernetes.table.memory')}</span><span>{t('kubernetes.table.restarts')}</span><span/></div>{pods.map(p=><div className="data-table__row" key={p[0]}><span><Box size={15}/><strong>{p[0]}</strong></span><span>{p[1]}</span><span><i className={`dot dot--${p[2]==='Running'?'success':p[2]==='Pending'?'warning':'danger'}`}/>{p[2]}</span><span>{p[3]}</span><span>{p[4]}</span><span>{p[5]}</span><button className="icon-button"><MoreHorizontal size={16}/></button></div>)}</div></article></>
+ <article className="panel table-panel"><div className="panel__header"><div><span className="eyebrow">{t('kubernetes.workloads.eyebrow')}</span><h2>{t('kubernetes.workloads.title')}</h2></div><span className="text-success"><CheckCircle2 size={15}/> {t('kubernetes.workloads.monitoring')}</span></div><div className="data-table"><div className="data-table__head"><span>{t('kubernetes.table.pod')}</span><span>{t('kubernetes.table.namespace')}</span><span>{t('kubernetes.table.status')}</span><span>{t('kubernetes.table.cpu')}</span><span>{t('kubernetes.table.memory')}</span><span>{t('kubernetes.table.restarts')}</span><span/></div>{pods.map(p=><div className="data-table__row" key={p[0]}><span><Box size={15}/><strong>{p[0]}</strong></span><span>{p[1]}</span><span><i className={`dot dot--${p[2]==='Running'?'success':p[2]==='Pending'?'warning':'danger'}`}/>{p[2]}</span><span>{p[3]}</span><span>{p[4]}</span><span>{p[5]}</span><button className="icon-button"><MoreHorizontal size={16}/></button></div>)}</div></article>
+
+ <article className="panel table-panel"><div className="panel__header"><div><span className="eyebrow">Segurança</span><h2>Visualizador de RBAC (simulado)</h2></div><button className="icon-button" title={rbacOpen?'Recolher':'Expandir'} onClick={()=>setRbacOpen(v=>!v)}>{rbacOpen?<ChevronUp size={16}/>:<ChevronDown size={16}/>}</button></div>
+  {rbacOpen && <div className="data-table">
+   <div className="data-table__head"><span>Usuário</span><span>Papel</span><span>Namespace</span><span/></div>
+   {rbacBindings.map((b,i)=><div className="data-table__row" key={`${b.user}-${b.namespace}-${i}`}>
+    <span><Users size={15}/><strong>{b.user}</strong></span>
+    <span><span className={`rbac-role-badge rbac-role-badge--${b.role}`}>{b.role}</span></span>
+    <span>{b.namespace}</span>
+    <span/>
+   </div>)}
+  </div>}
+  {rbacOpen && <div style={{padding:'10px 18px 16px',fontSize:11,color:'var(--muted)'}}>Usuários mock disponíveis: {mockRbacUsers.join(', ')}. Painel somente leitura — não altera permissões reais.</div>}
+ </article></>
 }
